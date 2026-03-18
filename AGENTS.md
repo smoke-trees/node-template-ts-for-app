@@ -186,3 +186,14 @@ This backend is built using the smoke-trees ecosystem, specifically leveraging `
 ### General Docs
 
 Docs: [https://github.com/smoke-trees/node-template-ts/wiki](https://github.com/smoke-trees/node-template-ts/wiki)
+
+--------------------------------------------------------------------------------
+
+## Verification
+
+- Run `pnpm run build` to build the project and make sure
+
+## Linting (post verification)
+
+- Run `npx prettier . --write` to format the code according to project standards
+
