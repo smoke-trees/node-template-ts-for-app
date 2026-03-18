@@ -38,6 +38,8 @@ This backend is built using the smoke-trees ecosystem, specifically leveraging `
 - Use `camelCase` for function names
 - Use `camelCase` for method names
 - Use `camelCase` for property names
+- Avoid using `any` at all costs
+- Prioritize typescript inference over explicit type declarations but declare types for variables that are not inferred correctly
 
 ## Project Structure
 
@@ -69,7 +71,8 @@ This backend is built using the smoke-trees ecosystem, specifically leveraging `
 ## Logging
 
 - Use the `log` object from the `smoke-context` package for all logging operations
-- Avoid using `console.log` directly
+- Scan for any `console.*` call. Every occurrence is an error — no exceptions.
+- Never use `console.log` directly
 - The logger is configured via postgres-backend and supports structured logging
 - All the logs should be in the format `log.[type]([log message], [class name][function name], [object for and parameters needed])`
 - Error logs will be in the format `log.error([log message], [class name][function name], error, [object for and parameters needed])`
@@ -125,6 +128,7 @@ This backend is built using the smoke-trees ecosystem, specifically leveraging `
 6. Use `npm run dev` for development with hot reload
 
 ## Function Rules
+
 - All Functions should return `Result` or `ResultWithCount` object from `@smoke-trees/postgres-backend` package.
 - The first parameter is boolean indicatinf if there's an error.
 - The second parameter is error code of `ErrorCode` enum from the same package.
@@ -135,6 +139,7 @@ This backend is built using the smoke-trees ecosystem, specifically leveraging `
 - Avoid explicit Return types in functions, typescript will infer the return type
 
 ## Dao Functions
+
 - `read` function to read single entry from the database. Defaults to `id` field but can be passed a where clause using `{where: {field: value}}` object.
 - `readMany` function to read multiple entries from the database
 - `create` function to create a new entry in the database
@@ -142,8 +147,43 @@ This backend is built using the smoke-trees ecosystem, specifically leveraging `
 - `delete` function to delete an existing entry from the database
 
 ## Result Object
+
 - Use `result.status.error` to check if there's an error
 - Use `result.status.code` to check the error code
 - Use `result.message` to check the error message
 - Use `result.result` to get the data returned by the function
 - Use `result.count` to get the count of the data returned by the function
+
+## Controller Functions
+
+- All Routes will have their inputs validated depending on the functions they call
+- All routes will have error handling implemented
+- All Routes will be documented using `Documentation` decorator from `@smoke-trees/postgres-backend`
+- Reference to add documentation for routes is written below:
+
+```
+@Documentation.addRoute({
+  description: "Create a new entity",
+  tags: ['Address'],
+  method: Methods.POST,
+  path: `/address`,
+  requestBody: {
+    $ref: Documentation.getRef(Address),
+  },
+  responses: {
+    "201": {
+      description: "Created",
+      value: { $ref: Documentation.getRef(Result<string>) },
+    },
+    "400": {
+      description: "Bad Request",
+      value: { $ref: Documentation.getRef(Result) },
+    },
+  },
+})
+```
+
+### General Docs
+
+Docs: [https://github.com/smoke-trees/node-template-ts/wiki](https://github.com/smoke-trees/node-template-ts/wiki)
+
