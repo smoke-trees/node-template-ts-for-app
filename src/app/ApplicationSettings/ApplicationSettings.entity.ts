@@ -13,7 +13,7 @@ export enum SettingTypes {
 export interface IApplicationSettings {
 	id: string
 	name: string
-	value: string
+	value: any
 	type: SettingTypes
 	isPublic: boolean
 }
@@ -33,7 +33,7 @@ export class ApplicationSettings extends BaseEntity {
 
 	@Documentation.addField({ type: 'string' })
 	@Column({ type: 'json' })
-	value!: string
+	value!: any
 
 	@Documentation.addField({
 		type: 'string',
@@ -41,7 +41,7 @@ export class ApplicationSettings extends BaseEntity {
 		default: SettingTypes.STRING
 	})
 	@Column({ type: 'enum', enum: SettingTypes, default: SettingTypes.STRING })
-	type!: string
+	type!: SettingTypes
 
 	@Documentation.addField({ type: 'string' })
 	@Column({ type: 'boolean', nullable: true, default: false })

@@ -30,7 +30,7 @@ export class DeviceInfoService extends Service<DeviceInfo> {
 			const newDeviceInfo = { ...deviceInfo.result, ...info }
 			const updatedInfo = await this.dao.update(deviceInfo.result.id, newDeviceInfo)
 			if (updatedInfo.status.error) {
-				return new Result(false, ErrorCode.NoUpdatesPerformed, 'Some Error in updating')
+				return new Result(true, ErrorCode.NoUpdatesPerformed, 'Some Error in updating')
 			}
 			return new Result(false, ErrorCode.Success, 'Updated DeviceInfo')
 		} else {

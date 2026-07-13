@@ -245,6 +245,11 @@ export class NotificationController extends ServiceController<Notification> {
 	})
 	async sendFCMNotificationToUser(req: Request, res: Response): Promise<void> {
 		const userId = req.body.userId
+		if (!userId || !req.body.notification) {
+			const result = new Result(true, ErrorCode.BadRequest, 'Request params missing')
+			res.status(result.getStatus()).json(result)
+			return
+		}
 		const title = req.body.notification.title
 		const body = req.body.notification.body
 		const imageUrl = req.body.notification.imageUrl

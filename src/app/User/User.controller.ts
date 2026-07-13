@@ -412,17 +412,6 @@ export class UserController extends ServiceController<User> {
 			required: ['userId', 'purchaseId']
 		}
 	})
-	async resetSubscriptionHandler(req: Request, res: Response) {
-		const { userId, purchaseId } = req.body
-		if (!userId || !purchaseId) {
-			const result = new Result(true, ErrorCode.BadRequest, 'Request params missing')
-			res.status(result.getStatus()).json(result)
-			return
-		}
-		const result = await this.service.resetSubscription(userId, purchaseId)
-		res.status(result.getStatus()).json(result)
-		return
-	}
 
 	@Documentation.addRoute({
 		path: '/user/sign-up',

@@ -10,9 +10,7 @@ export class ApplicationSettings extends Settings {
 	database: string
 	jwtTokenExpiry: number
 	jwtRefreshExpiry: number
-	jwtSecret: string
 	jwtSecretKey: string
-	jwtSecretKeyKey: string
 	refreshSecretKey: string
 	orderIdPrefix: string
 	frontEndUrl: string
@@ -45,8 +43,6 @@ export class ApplicationSettings extends Settings {
 		this.jwtTokenExpiry = parseTimespanToSeconds(this.getValue('JWT_TOKEN_EXPIRY', '1d'))
 		this.jwtRefreshExpiry = parseTimespanToSeconds(this.getValue('JWT_REFRESH_EXPIRY', '7d'))
 		this.jwtSecretKey = this.getValue('JWT_SECRET', 'mysecretjwt')
-		this.jwtSecret = this.jwtSecretKey
-		this.jwtSecretKeyKey = this.jwtSecretKey
 		this.refreshSecretKey = this.getValue('REFRESH_SECRET', 'mysecretrefresh')
 		this.orderIdPrefix = this.getValue('ORDER_ID_PREFIX', 'ORD-')
 		this.frontEndUrl = this.getValue('FRONTEND_URL', 'http://localhost:3000')
