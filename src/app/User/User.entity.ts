@@ -22,14 +22,14 @@ export class User extends BaseEntity implements IUser {
 	@Column({ name: 'email', type: 'varchar' })
 	email!: string
 
-	@Documentation.addField({ type: 'string' })
+	@Documentation.addField({ type: 'boolean' })
 	@Column({ name: 'email_verified', type: 'boolean', default: false })
 	emailVerified!: boolean
 
 	@Column({ name: 'password', type: 'varchar' })
 	password!: string
 
-	@Documentation.addField({ type: 'string' })
+	@Documentation.addField({ type: 'string', enum: Object.values(UserType) })
 	@Column({ name: 'type', type: 'enum', enum: UserType, default: UserType.student })
 	type!: UserType
 
@@ -45,7 +45,7 @@ export class User extends BaseEntity implements IUser {
 	@Column({ name: 'country_code', type: 'varchar', nullable: true })
 	countryCode?: string
 
-	@Documentation.addField({ type: 'string' })
+	@Documentation.addField({ type: 'boolean' })
 	@Column({ name: 'is_active', type: 'boolean', nullable: true, default: true })
 	isActive!: boolean
 
@@ -53,7 +53,7 @@ export class User extends BaseEntity implements IUser {
 	@Column({ name: 'consent_given', type: 'boolean', nullable: true, default: false })
 	consentGiven?: boolean | null
 
-	@Documentation.addField({ type: 'string' })
+	@Documentation.addField({ type: 'string', format: 'date-time' })
 	@Column({ name: 'consent_at', type: 'timestamp', nullable: true })
 	consentAt?: Date | null
 

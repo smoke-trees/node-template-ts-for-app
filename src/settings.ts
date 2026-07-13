@@ -28,7 +28,6 @@ export class ApplicationSettings extends Settings {
 		auth_provider_x509_cert_url: string
 		client_x509_cert_url: string
 		universe_domain: string
-		
 	}
 
 	constructor() {
@@ -47,7 +46,6 @@ export class ApplicationSettings extends Settings {
 		this.orderIdPrefix = this.getValue('ORDER_ID_PREFIX', 'ORD-')
 		this.frontEndUrl = this.getValue('FRONTEND_URL', 'http://localhost:3000')
 		this.appName = this.getValue('APP_NAME', 'Application')
-		
 	}
 }
 

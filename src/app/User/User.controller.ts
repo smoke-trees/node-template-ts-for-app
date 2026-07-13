@@ -12,7 +12,7 @@ import { Response, Request } from 'express'
 import { User } from './User.entity'
 import { UserService } from './User.service'
 import { passwordRegex } from './IUser'
-import { FindOptionsWhere, In, Raw } from 'typeorm'
+import { FindOptionsWhere, In } from 'typeorm'
 import { inject, injectable } from 'inversify'
 import { AuthMiddleware } from '../../middleware/authMiddleware'
 import { ContextProvider } from '@smoke-trees/smoke-context'
@@ -387,34 +387,6 @@ export class UserController extends ServiceController<User> {
 	}
 
 	@Documentation.addRoute({
-		path: '/user/reset-subscription',
-		tags: ['User'],
-		method: Methods.POST,
-		responses: {
-			200: {
-				description: 'Success',
-				value: { $ref: Documentation.getRef(Result) }
-			},
-			400: {
-				description: 'Bad Request',
-				value: { $ref: Documentation.getRef(Result) }
-			}
-		},
-		requestBody: {
-			type: 'object',
-			properties: {
-				userId: {
-					type: 'string'
-				},
-				purchaseId: {
-					type: 'string'
-				}
-			},
-			required: ['userId', 'purchaseId']
-		}
-	})
-
-	@Documentation.addRoute({
 		path: '/user/sign-up',
 		tags: ['User'],
 		method: Methods.POST,
@@ -455,13 +427,22 @@ export class UserController extends ServiceController<User> {
 					description: 'Version of the privacy notice the user consented to'
 				}
 			},
-			required: ['email', 'password']
+			required: ['email', 'password', 'consentGiven']
 		}
 	})
 	async signupHandler(req: Request, res: Response) {
 		const { email, password, consentGiven, consentAt, consentVersion } = req.body
 		if (!email || !password) {
 			const result = new Result(true, ErrorCode.BadRequest, 'Request params missing')
+			res.status(result.getStatus()).json(result)
+			return
+		}
+		if (consentGiven !== true) {
+			const result = new Result(
+				true,
+				ErrorCode.BadRequest,
+				'Consent is required to create an account'
+			)
 			res.status(result.getStatus()).json(result)
 			return
 		}
@@ -477,9 +458,9 @@ export class UserController extends ServiceController<User> {
 		const result = await this.service.signUp(
 			email,
 			password,
-			consentGiven ?? null,
-			consentAt ? new Date(consentAt) : null,
-			consentVersion ?? null
+			true,
+			consentAt ? new Date(consentAt) : new Date(),
+			consentVersion ?? '1.0.0'
 		)
 		res.status(result.getStatus()).json(result)
 		return
@@ -567,10 +548,10 @@ export class UserController extends ServiceController<User> {
 		tags: ['User'],
 		method: Methods.GET,
 		description:
-			'DPDPA data portability — download the authenticated user’s personal data (profile, consent and device information) as a well-formed, user-readable JSON file. Admins/ops may pass ?userId= to export another user’s data.',
+			'DPDPA data portability — export the authenticated user’s personal data (profile, consent and device information) as JSON. Admins/ops may pass ?userId= to export another user’s data.',
 		responses: {
 			200: {
-				description: 'Success — JSON file download of the user’s personal data',
+				description: 'Success — JSON Result containing the user’s personal data',
 				value: { $ref: Documentation.getRef(Result) }
 			},
 			400: {
@@ -616,13 +597,9 @@ export class UserController extends ServiceController<User> {
 			}
 			const targetUserId = isPrivileged && requestedUserId ? requestedUserId : context.id
 			const result = await this.service.exportUserData(targetUserId)
-			if (result.status.error) {
-				res.status(result.getStatus()).json(result)
-				return
-			}
 			res.status(result.getStatus()).json(result)
 		} catch (error) {
-			log.error('Error exporting user data', 'exportUserData', error)
+			log.error('Error exporting user data', 'UserController.downloadDataHandler', error)
 			const result = new Result(true, ErrorCode.InternalServerError, 'Failed to export user data')
 			res.status(result.getStatus()).json(result)
 		}

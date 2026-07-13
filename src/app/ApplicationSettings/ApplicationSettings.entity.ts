@@ -31,7 +31,7 @@ export class ApplicationSettings extends BaseEntity {
 	@Column({ type: 'varchar' })
 	name!: string
 
-	@Documentation.addField({ type: 'string' })
+	@Documentation.addField({ type: 'object' })
 	@Column({ type: 'json' })
 	value!: any
 
@@ -43,7 +43,7 @@ export class ApplicationSettings extends BaseEntity {
 	@Column({ type: 'enum', enum: SettingTypes, default: SettingTypes.STRING })
 	type!: SettingTypes
 
-	@Documentation.addField({ type: 'string' })
+	@Documentation.addField({ type: 'boolean' })
 	@Column({ type: 'boolean', nullable: true, default: false })
 	isPublic!: boolean
 

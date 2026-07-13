@@ -30,7 +30,11 @@ export class DeviceInfoController extends ServiceController<DeviceInfo> {
 						userIdLoc: (req: Request) => req.body.userId
 					})
 				],
-				read: [],
+				read: [
+					authMiddleWare.generateAuthMiddleWare({
+						contextOnly: true
+					})
+				],
 				readMany: [
 					authMiddleWare.generateAuthMiddleWare({
 						userIdLoc: (req: Request) => req.query.userId?.toString()

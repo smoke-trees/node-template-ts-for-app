@@ -38,6 +38,11 @@ export class NotificationController extends ServiceController<Notification> {
 			notificationService,
 			{ paths: { create: false, update: false, delete: false } },
 			{
+				read: [
+					authMiddleWare.generateAuthMiddleWare({
+						contextOnly: true
+					})
+				],
 				readMany: [
 					authMiddleWare.generateAuthMiddleWare({
 						userIdLoc: (req: Request) => req.query.userId?.toString()
@@ -101,7 +106,7 @@ export class NotificationController extends ServiceController<Notification> {
 
 	async manualNotificationsByAdmin(req: Request, res: Response) {
 		const body: IManualNotificationAdmin = req.body
-		if (!body.title || !body.clickParams || !body.receiverType) {
+		if (!body.title || !body.body || !body.clickParams || !body.receiverType) {
 			const result = new Result(true, ErrorCode.BadRequest, 'Request Params Missing')
 			res.status(result.getStatus()).json(result)
 			return

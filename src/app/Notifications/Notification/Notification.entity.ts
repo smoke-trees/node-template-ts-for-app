@@ -91,7 +91,7 @@ export class Notification extends BaseEntity implements INotificationModel {
 		default: false
 	})
 	@Documentation.addField({
-		description: 'was notification sent successfully',
+		description: 'Whether the user has read this notification',
 		type: 'boolean',
 		example: true
 	})
