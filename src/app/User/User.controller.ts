@@ -14,6 +14,8 @@ import { passwordRegex } from './IUser'
 import { FindOptionsWhere, In, Raw } from 'typeorm'
 import { inject, injectable } from 'inversify'
 import { AuthMiddleware } from '../../middleware/authMiddleware'
+import { ContextProvider } from '@smoke-trees/smoke-context'
+import { UserType } from './IUser'
 
 @injectable()
 export class UserController extends ServiceController<User> {
@@ -30,15 +32,21 @@ export class UserController extends ServiceController<User> {
 		readonly authMiddleware: AuthMiddleware
 	) {
 		super(app, User, service, undefined, {
-			create: [authMiddleware.generateAuthMiddleWare({ adminOnly: true })],
+			create: [authMiddleware.generateAuthMiddleWare({ opsOnly: true })],
 			update: [
 				authMiddleware.generateAuthMiddleWare({
-					userIdLoc: (req: Request) => req.params.id
+					userIdLoc: (req: Request) => req.params.id,
+					opsBypass: true
 				})
 			],
 			delete: [authMiddleware.generateAuthMiddleWare({ adminOnly: true })],
-			read: [authMiddleware.generateAuthMiddleWare({})],
-			readMany: [],
+			read: [
+				authMiddleware.generateAuthMiddleWare({
+					userIdLoc: (req: Request) => req.params.id,
+					opsBypass: true
+				})
+			],
+			readMany: [authMiddleware.generateAuthMiddleWare({ opsOnly: true })],
 			readManyWithoutPagination: [authMiddleware.generateAuthMiddleWare({ opsOnly: true })]
 		})
 		this.service = service
@@ -113,6 +121,16 @@ export class UserController extends ServiceController<User> {
 				method: Methods.POST,
 				handler: this.invalidTokenHandler.bind(this),
 				localMiddleware: []
+			},
+			{
+				path: '/download-data',
+				method: Methods.GET,
+				handler: this.downloadDataHandler.bind(this),
+				localMiddleware: [
+					authMiddleware.generateAuthMiddleWare({
+						contextOnly: true
+					})
+				]
 			}
 		)
 		this.loadDocumentation()
@@ -430,7 +448,8 @@ export class UserController extends ServiceController<User> {
 				password: {
 					type: 'string',
 					minLength: 8,
-					description: 'Password must contain at least: 1 upper, 1 lower alphabet, 1 number and 1 special character and be at least 8 characters long'
+					description:
+						'Password must contain at least: 1 upper, 1 lower alphabet, 1 number and 1 special character and be at least 8 characters long'
 				},
 				consentGiven: {
 					type: 'boolean',
@@ -551,6 +570,72 @@ export class UserController extends ServiceController<User> {
 		const result = await this.service.invalidateToken(reftoken)
 		res.status(result.getStatus()).json(result)
 		return
+	}
+
+	@Documentation.addRoute({
+		path: '/user/download-data',
+		tags: ['User'],
+		method: Methods.GET,
+		description:
+			'DPDPA data portability — download the authenticated user’s personal data (profile, consent and device information) as a well-formed, user-readable JSON file. Admins/ops may pass ?userId= to export another user’s data.',
+		responses: {
+			200: {
+				description: 'Success — JSON file download of the user’s personal data',
+				value: { $ref: Documentation.getRef(Result) }
+			},
+			400: {
+				description: 'Bad Request',
+				value: { $ref: Documentation.getRef(Result) }
+			},
+			401: {
+				description: 'Not Authorized',
+				value: { $ref: Documentation.getRef(Result) }
+			},
+			404: {
+				description: 'User not found',
+				value: { $ref: Documentation.getRef(Result) }
+			}
+		},
+		parameters: [
+			{
+				name: 'userId',
+				in: 'query',
+				required: false,
+				description: 'Target user id (admin/ops only). Defaults to the authenticated user.'
+			}
+		]
+	})
+	async downloadDataHandler(req: Request, res: Response) {
+		try {
+			const context = ContextProvider.getContext()?.values as { id?: string; type?: UserType }
+			if (!context?.id) {
+				const result = new Result(true, ErrorCode.NotAuthorized, 'User not authenticated')
+				res.status(result.getStatus()).json(result)
+				return
+			}
+			const requestedUserId = req.query.userId?.toString()
+			const isPrivileged = context.type === UserType.admin || context.type === UserType.ops
+			if (requestedUserId && !isPrivileged && requestedUserId !== context.id) {
+				const result = new Result(
+					true,
+					ErrorCode.NotAuthorized,
+					"Not authorized to export another user's data"
+				)
+				res.status(result.getStatus()).json(result)
+				return
+			}
+			const targetUserId = isPrivileged && requestedUserId ? requestedUserId : context.id
+			const result = await this.service.exportUserData(targetUserId)
+			if (result.status.error) {
+				res.status(result.getStatus()).json(result)
+				return
+			}
+			res.status(result.getStatus()).json(result)
+		} catch (error) {
+			console.error('Error exporting user data:', error)
+			const result = new Result(true, ErrorCode.InternalServerError, 'Failed to export user data')
+			res.status(result.getStatus()).json(result)
+		}
 	}
 
 	@Documentation.addRoute({

@@ -18,6 +18,11 @@ import {
 import { UserDao } from './app/User/User.dao'
 import { UserService } from './app/User/User.service'
 import { UserController } from './app/User/User.controller'
+import {
+	ApplicationSettingsDao,
+	ApplicationSettingsService,
+	ApplicationSettingsController
+} from './app/ApplicationSettings'
 import { AuthMiddleware } from './middleware/authMiddleware'
 
 export const container: Container = new Container()
@@ -44,9 +49,14 @@ container.bind(UserService).toSelf()
 container.bind(UserController).toSelf()
 container.bind(AuthMiddleware).toSelf()
 
+container.bind(ApplicationSettingsDao).toSelf()
+container.bind(ApplicationSettingsService).toSelf()
+container.bind(ApplicationSettingsController).toSelf()
+
 app.addController(container.get(NotificationController))
 app.addController(container.get(DeviceInfoController))
 app.addController(container.get(UserController))
+app.addController(container.get(ApplicationSettingsController))
 
 app.addMiddleWare(cors())
 app.addMiddleWare(json())

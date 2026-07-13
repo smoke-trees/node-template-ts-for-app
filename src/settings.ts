@@ -1,8 +1,6 @@
 import { Settings } from '@smoke-trees/postgres-backend'
 import './config-env'
 
-
-
 export class ApplicationSettings extends Settings {
 	databaseType: 'postgres' | 'mysql'
 	dbPassword: string
@@ -17,7 +15,9 @@ export class ApplicationSettings extends Settings {
 	jwtSecretKeyKey: string
 	refreshSecretKey: string
 	orderIdPrefix: string
-	// App Links / Universal Links
+	frontEndUrl: string
+	appName: string
+	// Firebase Config for Firebase Cloud Messaging and download it from firebase console
 	firebaseCreds: {
 		type: string
 		project_id: string
@@ -30,6 +30,7 @@ export class ApplicationSettings extends Settings {
 		auth_provider_x509_cert_url: string
 		client_x509_cert_url: string
 		universe_domain: string
+		
 	}
 
 	constructor() {
@@ -48,6 +49,9 @@ export class ApplicationSettings extends Settings {
 		this.jwtSecretKeyKey = this.jwtSecretKey
 		this.refreshSecretKey = this.getValue('REFRESH_SECRET', 'mysecretrefresh')
 		this.orderIdPrefix = this.getValue('ORDER_ID_PREFIX', 'ORD-')
+		this.frontEndUrl = this.getValue('FRONTEND_URL', 'http://localhost:3000')
+		this.appName = this.getValue('APP_NAME', 'Application')
+		
 	}
 }
 

@@ -9,6 +9,7 @@ import { _QueryDeepPartialEntity, SelectedRead } from '@smoke-trees/postgres-bac
 import { EntityManager, FindOneOptions, FindOptionsWhere, FindOptionsSelect } from 'typeorm'
 import { ContextProvider } from '@smoke-trees/smoke-context'
 import { UserType } from './IUser'
+import { DeviceInfoEntity } from '../Notifications/DeviceInfo'
 import { inject, injectable } from 'inversify'
 
 import database from '../../database'
@@ -27,6 +28,71 @@ export class UserService extends Service<User> {
 
 	hashPassword(password: string) {
 		return bcrypt.hashSync(password, 12)
+	}
+
+	async exportUserData(userId: string) {
+		try {
+			const userResult = await this.dao.read({
+				where: { id: userId },
+				relations: ['device']
+			})
+			if (userResult.status.error || !userResult.result) {
+				return new Result(true, ErrorCode.NotFound, 'User not found')
+			}
+			const user = userResult.result as User & { device?: DeviceInfoEntity[] }
+
+			const toIso = (value?: Date | null) =>
+				value ?
+					value instanceof Date ?
+						value.toISOString()
+					:	new Date(value).toISOString()
+				:	null
+
+			const devices = (user.device ?? []).map((device) => ({
+				deviceId: device.deviceId ?? null,
+				operatingSystem: device.os ?? null,
+				appVersion: device.currentUserVersion ?? null,
+				buildNumber: device.currentUserBuildNumber ?? null,
+				fcmToken: device.fcmToken ?? null,
+				ipAddress: device.deviceIpAddress ?? null,
+				installedOn: toIso(device.installedTime),
+				lastLoginOn: toIso(device.lastLoginTime),
+				registeredOn: toIso(device.createdAt),
+				lastUpdated: toIso(device.updatedAt)
+			}))
+
+			const exportData = {
+				dataFiduciary: settings.appName,
+				exportedOn: new Date().toISOString(),
+				personalInformation: {
+					id: user.id,
+					firstName: user.firstname ?? null,
+					lastName: user.lastname ?? null,
+					email: user.email,
+					emailVerified: user.emailVerified,
+					phoneNumber: user.phoneNumber ?? null,
+					country: user.country ?? null,
+					countryCode: user.countryCode ?? null,
+					accountType: user.type,
+					isActive: user.isActive,
+					registeredOn: toIso(user.createdAt),
+					lastUpdated: toIso(user.updatedAt)
+				},
+				consent: {
+					consentGiven: user.consentGiven ?? false,
+					consentGivenOn: toIso(user.consentAt),
+					consentVersion: user.consentVersion ?? null
+				},
+				devices
+			}
+
+			return new Result(false, ErrorCode.Success, 'User data exported successfully', exportData)
+		} catch (error) {
+			log.error('Error exporting user data', 'UserService.exportUserData', error, {
+				userId
+			})
+			return new Result(true, ErrorCode.InternalServerError, 'Error exporting user data')
+		}
 	}
 
 	async resetSubscription(userId: string, purchaseId: string) {
@@ -74,13 +140,13 @@ export class UserService extends Service<User> {
 		const createUser = await this.dao.create({
 			email: email.toLowerCase(),
 			password: hashedPassword,
-			...(consentGiven
-				? {
-						consentGiven: true,
-						consentAt: consentAt ?? new Date(),
-						consentVersion: consentVersion ?? '1.0.0'
-				  }
-				: {})
+			...(consentGiven ?
+				{
+					consentGiven: true,
+					consentAt: consentAt ?? new Date(),
+					consentVersion: consentVersion ?? '1.0.0'
+				}
+			:	{})
 		})
 		const postCreate = Date.now() - postHash
 		if (createUser.status.error || !createUser.result) {

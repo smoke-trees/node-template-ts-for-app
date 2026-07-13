@@ -63,8 +63,18 @@ export class DeviceInfo extends BaseEntity implements IDeviceInfoModel {
 	constructor(deviceInfo?: IDeviceInfoCreateModel) {
 		super(deviceInfo)
 		if (deviceInfo) {
-			const { fcmToken, deviceId, currentUserVersion, currentUserBuildNumber, os, userId, id, installedTime, deviceIpAddress, lastLoginTime } =
-				deviceInfo
+			const {
+				fcmToken,
+				deviceId,
+				currentUserVersion,
+				currentUserBuildNumber,
+				os,
+				userId,
+				id,
+				installedTime,
+				deviceIpAddress,
+				lastLoginTime
+			} = deviceInfo
 			if (id) this.id = id
 			this.userId = userId
 			this.os = os

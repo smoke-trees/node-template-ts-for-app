@@ -291,5 +291,4 @@ export class NotificationService extends Service<Notification> {
 		}
 		return result
 	}
-
 }

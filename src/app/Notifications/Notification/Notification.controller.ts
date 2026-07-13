@@ -36,7 +36,7 @@ export class NotificationController extends ServiceController<Notification> {
 			app,
 			Notification,
 			notificationService,
-			{ paths: { create: false, update: false, delete: true } },
+			{ paths: { create: false, update: false, delete: false } },
 			{
 				readMany: [
 					authMiddleWare.generateAuthMiddleWare({
