@@ -3,6 +3,7 @@ import {
 	Controller,
 	Documentation,
 	ErrorCode,
+	log,
 	Methods,
 	Result,
 	ServiceController
@@ -621,7 +622,7 @@ export class UserController extends ServiceController<User> {
 			}
 			res.status(result.getStatus()).json(result)
 		} catch (error) {
-			console.error('Error exporting user data:', error)
+			log.error('Error exporting user data', 'exportUserData', error)
 			const result = new Result(true, ErrorCode.InternalServerError, 'Failed to export user data')
 			res.status(result.getStatus()).json(result)
 		}
