@@ -47,6 +47,15 @@ export class ApplicationSettings extends Settings {
 		this.frontEndUrl = this.getValue('FRONTEND_URL', 'http://localhost:3000')
 		this.appName = this.getValue('APP_NAME', 'Application')
 	}
+
+	get defaultAppSettings(): Record<string, string> {
+		return {
+			forceUpdateMinimumVersionAndroid: '1.0.0',
+			softUpdateMinimumVersionAndroid: '1.0.0',
+			forceUpdateMinimumVersionIos: '1.0.0',
+			softUpdateMinimumVersionIos: '1.0.0'
+		}
+	}
 }
 
 function parseTimespanToSeconds(val: string): number {

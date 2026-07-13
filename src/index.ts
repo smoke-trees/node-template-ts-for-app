@@ -2,6 +2,8 @@ import { Application, Documentation } from '@smoke-trees/postgres-backend'
 import swaggerUiExpress from 'swagger-ui-express'
 import database from './database'
 import { container } from './setup'
+import { ApplicationSettingsService } from './app/ApplicationSettings/ApplicationSettings.service'
+import { log } from './log'
 
 Documentation.addServers([
 	{
@@ -24,6 +26,16 @@ app.getApp().get('/docs', swaggerUiExpress.setup(Documentation.getAPIJson()))
 app.loadMiddleware()
 app.loadControllers()
 
-database.connect()
-
-app.run()
+database
+	.connect()
+	.then(async (connected) => {
+		if (connected) {
+			await container.get(ApplicationSettingsService).seedDefaults()
+			app.run()
+		} else {
+			log.error('Unable to connect to database', 'index', new Error('Database connection failed'))
+		}
+	})
+	.catch((error) => {
+		log.error('Unexpected error during application startup', 'index', error)
+	})

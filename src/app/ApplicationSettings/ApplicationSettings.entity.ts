@@ -28,7 +28,7 @@ export class ApplicationSettings extends BaseEntity {
 	id!: string
 
 	@Documentation.addField({ type: 'string' })
-	@Column({ type: 'varchar' })
+	@Column({ type: 'varchar', unique: true })
 	name!: string
 
 	@Documentation.addField({ type: 'object' })
