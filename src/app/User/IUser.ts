@@ -1,0 +1,130 @@
+export interface IUser {
+	id: string
+	firstname?: string
+	lastname?: string
+	email: string
+	emailVerified: boolean
+	password: string
+	type: UserType
+	phoneNumber?: string
+	country?: string
+	countryCode?: string
+	isActive: boolean
+	consentGiven?: boolean | null
+	consentAt?: Date | null
+	consentVersion?: string | null
+}
+
+export enum UserType {
+	student = 'student',
+	ops = 'ops',
+	admin = 'admin'
+}
+
+const capsAlpha = [
+	'A',
+	'B',
+	'C',
+	'D',
+	'E',
+	'F',
+	'G',
+	'H',
+	'I',
+	'J',
+	'K',
+	'L',
+	'M',
+	'N',
+	'O',
+	'P',
+	'Q',
+	'R',
+	'S',
+	'T',
+	'U',
+	'V',
+	'W',
+	'X',
+	'Y',
+	'Z'
+]
+const smallAlpha = [
+	'a',
+	'b',
+	'c',
+	'd',
+	'e',
+	'f',
+	'g',
+	'h',
+	'i',
+	'j',
+	'k',
+	'l',
+	'm',
+	'n',
+	'o',
+	'p',
+	'q',
+	'r',
+	's',
+	't',
+	'u',
+	'v',
+	'w',
+	'x',
+	'y',
+	'z'
+]
+const nums = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+
+const spChrs = [
+	' ',
+	'!',
+	'"',
+	'#',
+	'$',
+	'%',
+	'&',
+	"'",
+	'(',
+	')',
+	'*',
+	'+',
+	',',
+	'-',
+	'.',
+	'/',
+	':',
+	';',
+	'<',
+	'=',
+	'>',
+	'?',
+	'@',
+	'[',
+	'\\',
+	']',
+	'^',
+	'_',
+	'`',
+	'{',
+	'|',
+	'}',
+	'~'
+]
+
+export const passwordRegex = {
+	test: (password: string) => {
+		if (password.length < 8) {
+			return false
+		}
+
+		const arrays = [capsAlpha, smallAlpha, nums, spChrs]
+
+		const hasEntry = (arr: string[]) => arr.some((e) => password.includes(e))
+
+		return arrays.every(hasEntry)
+	}
+}
