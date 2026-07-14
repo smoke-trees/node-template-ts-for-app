@@ -14,6 +14,7 @@ import { Documentation, ErrorCode, Result, Service, log } from '@smoke-trees/pos
 import { In, MoreThanOrEqual } from 'typeorm'
 import { inject, injectable } from 'inversify'
 import { UserDao } from '../../User/User.dao'
+import { UserTopicsDao } from '../UserTopics/UserTopics.dao'
 
 @Documentation.addSchema()
 export class NotificationVariableData {
@@ -94,6 +95,7 @@ export class NotificationService extends Service<Notification> {
 	userDao: UserDao
 	deviceInfoDao: DeviceInfoDao
 	firebaseMessagingClient: FirebaseMessagingClient
+	userTopicsDao: UserTopicsDao
 	constructor(
 		@inject(NotificationDao)
 		dao: NotificationDao,
@@ -102,12 +104,15 @@ export class NotificationService extends Service<Notification> {
 		@inject(FirebaseMessagingClient)
 		firebaseMessagingClient: FirebaseMessagingClient,
 		@inject(UserDao)
-		userDao: UserDao
+		userDao: UserDao,
+		@inject(UserTopicsDao)
+		userTopicsDao: UserTopicsDao
 	) {
 		super(dao)
 		this.deviceInfoDao = deviceInfoDao
 		this.firebaseMessagingClient = firebaseMessagingClient
 		this.userDao = userDao
+		this.userTopicsDao = userTopicsDao
 	}
 
 	createRawString(notificationString: string, variables: NotificationVariableData): string {
@@ -125,7 +130,7 @@ export class NotificationService extends Service<Notification> {
 	async sendFCMNotificationToDevices(
 		devices: DeviceInfoEntity[],
 		notificationCreate: FCMNotificationRequest
-	) {
+	): Promise<Result<null>> {
 		const fcmDevices = devices!.filter((device) => Boolean(device.fcmToken))
 		const fcmTokens = fcmDevices.map((device) => device.fcmToken) as string[]
 
@@ -189,25 +194,51 @@ export class NotificationService extends Service<Notification> {
 		if (devices.status.error) {
 			return devices
 		}
+		if (!devices.result || devices.result.length === 0) {
+			return new Result(false, ErrorCode.Success, 'No devices found for user')
+		}
 
-		return this.sendFCMNotificationToDevices(devices.result!, notificationCreate)
+		return this.sendFCMNotificationToDevices(devices.result, notificationCreate)
 	}
 
 	async sendMessageToTopic(topic: string, notificationCreate: IManualNotificationAdmin) {
 		try {
+			const notificationBody = this.createNotificationBody(notificationCreate)
 			const messageId = await this.firebaseMessagingClient.sendMessageToTopic(
 				topic,
-				this.createNotificationBody(notificationCreate)
+				notificationBody
 			)
-			if (messageId != null) {
-				return new Result(false, ErrorCode.Success, 'Sent Successfully', 1)
-			} else {
+			if (messageId == null) {
 				return new Result(
 					true,
 					ErrorCode.InternalServerError,
 					'Error in sending FCM Notification to topic'
 				)
 			}
+
+			const subscribers = await this.userTopicsDao.readMany({ where: { topicName: topic } })
+			if (subscribers.result && subscribers.result.length > 0) {
+				const batchId = crypto.randomUUID()
+				for (const subscriber of subscribers.result) {
+					const notificationEntity = new Notification({
+						userId: subscriber.userId,
+						notificationToken: null,
+						title: notificationBody.title,
+						body: notificationBody.body,
+						imageUrl: notificationBody.imageUrl ?? null,
+						redirectParameters: notificationBody.redirectParameters,
+						phoneNumber: null,
+						notificationType: NotificationType.Promotional,
+						notificationSent: true,
+						notificationFailureData: null,
+						batchId,
+						topicName: topic
+					})
+					this.create(notificationEntity)
+				}
+			}
+
+			return new Result(false, ErrorCode.Success, 'Sent Successfully', 1)
 		} catch (error) {
 			log.error(
 				'Error in sending FCM Notification to topic',

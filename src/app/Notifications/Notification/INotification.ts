@@ -18,6 +18,7 @@ export interface INotificationCreateModel {
 	notificationSent: boolean | null
 	notificationFailureData: any | null
 	read?: boolean
+	topicName?: string | null
 }
 
 export type INotificationModel = INotificationCreateModel

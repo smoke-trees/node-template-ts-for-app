@@ -15,6 +15,11 @@ import {
 	DeviceInfoDao,
 	DeviceInfoService
 } from './app/Notifications/DeviceInfo'
+import {
+	UserTopicsController,
+	UserTopicsDao,
+	UserTopicsService
+} from './app/Notifications/UserTopics'
 import { UserDao } from './app/User/User.dao'
 import { UserService } from './app/User/User.service'
 import { UserController } from './app/User/User.controller'
@@ -44,6 +49,10 @@ container.bind(DeviceInfoDao).toSelf()
 container.bind(DeviceInfoService).toSelf()
 container.bind(DeviceInfoController).toSelf()
 
+container.bind(UserTopicsDao).toSelf()
+container.bind(UserTopicsService).toSelf()
+container.bind(UserTopicsController).toSelf()
+
 container.bind(UserDao).toSelf()
 container.bind(UserService).toSelf()
 container.bind(UserController).toSelf()
@@ -55,6 +64,7 @@ container.bind(ApplicationSettingsController).toSelf()
 
 app.addController(container.get(NotificationController))
 app.addController(container.get(DeviceInfoController))
+app.addController(container.get(UserTopicsController))
 app.addController(container.get(UserController))
 app.addController(container.get(ApplicationSettingsController))
 

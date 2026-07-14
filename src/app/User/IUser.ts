@@ -9,6 +9,8 @@ export interface IUser {
 	phoneNumber?: string
 	country?: string
 	countryCode?: string
+	isSoftDeleted: boolean
+	softDeletedAt: Date | null
 	isActive: boolean
 	consentGiven?: boolean | null
 	consentAt?: Date | null

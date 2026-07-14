@@ -1,0 +1,5 @@
+export { UserTopics } from './UserTopics.entity'
+export { UserTopicsDao } from './UserTopics.dao'
+export { UserTopicsService } from './UserTopics.service'
+export { UserTopicsController } from './UserTopics.controller'
+export { IUserTopics, IUserTopicsCreateModel } from './IUserTopics'

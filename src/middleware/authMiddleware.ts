@@ -58,7 +58,12 @@ export class AuthMiddleware {
 					return
 				}
 				const user = await this.userDao.read(tokenUserId)
-				if (user.status.error || !user.result) {
+				if (
+					user.status.error ||
+					!user.result ||
+					!user.result.isActive ||
+					user.result.isSoftDeleted
+				) {
 					const result = new Result(true, ErrorCode.NotAuthorized, 'Not Authorized')
 					res.status(result.getStatus()).json(result)
 					return

@@ -15,6 +15,7 @@ export class ApplicationSettings extends Settings {
 	orderIdPrefix: string
 	frontEndUrl: string
 	appName: string
+	userSoftDelete: boolean
 	// Firebase Config for Firebase Cloud Messaging and download it from firebase console
 	firebaseCreds: {
 		type: string
@@ -46,6 +47,7 @@ export class ApplicationSettings extends Settings {
 		this.orderIdPrefix = this.getValue('ORDER_ID_PREFIX', 'ORD-')
 		this.frontEndUrl = this.getValue('FRONTEND_URL', 'http://localhost:3000')
 		this.appName = this.getValue('APP_NAME', 'Application')
+		this.userSoftDelete = this.getValue('USER_SOFT_DELETE', 'true') === 'true'
 	}
 
 	get defaultAppSettings(): Record<string, string> {

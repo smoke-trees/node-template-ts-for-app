@@ -105,6 +105,10 @@ export class Notification extends BaseEntity implements INotificationModel {
 	})
 	notificationFailureData!: any | null
 
+	@Column({ name: 'topic_name', type: 'varchar', nullable: true })
+	@Documentation.addField({ type: 'string', description: 'FCM topic name if sent via topic' })
+	topicName?: string | null
+
 	@ManyToOne(() => User, (user) => user.notification, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'user_id' })
 	user?: User
@@ -125,6 +129,7 @@ export class Notification extends BaseEntity implements INotificationModel {
 			this.notificationSent = notification.notificationSent ?? null
 			this.notificationFailureData = notification.notificationFailureData ?? null
 			this.read = notification.read ?? false
+			this.topicName = notification.topicName ?? null
 		}
 	}
 }

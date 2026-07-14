@@ -3,6 +3,7 @@ import { IUser, UserType } from './IUser'
 import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm'
 import { NotificationEntity } from '../Notifications/Notification'
 import { DeviceInfoEntity } from '../Notifications/DeviceInfo'
+import { UserTopics } from '../Notifications/UserTopics'
 
 @Documentation.addSchema()
 @Entity({ name: 'user' })
@@ -67,6 +68,17 @@ export class User extends BaseEntity implements IUser {
 	@OneToMany(() => DeviceInfoEntity, (device) => device.user)
 	device?: DeviceInfoEntity[]
 
+	@OneToMany(() => UserTopics, (userTopic) => userTopic.user, { cascade: true })
+	userTopics?: UserTopics[]
+
+	@Documentation.addField({ type: 'boolean' })
+	@Column({ name: 'is_soft_deleted', type: 'boolean', nullable: true, default: false })
+	isSoftDeleted!: boolean
+
+	@Documentation.addField({ type: 'string', format: 'date-time' })
+	@Column({ name: 'soft_deleted_at', type: 'timestamp', nullable: true })
+	softDeletedAt!: Date | null
+
 	constructor(it?: IUser) {
 		super()
 		if (it) {
@@ -83,9 +95,12 @@ export class User extends BaseEntity implements IUser {
 			this.consentGiven = it.consentGiven
 			this.consentAt = it.consentAt
 			this.consentVersion = it.consentVersion
+			this.isSoftDeleted = it.isSoftDeleted
+			this.softDeletedAt = it.softDeletedAt
 			if (it.id) {
 				this.id = it.id
 			}
+			
 		}
 	}
 }

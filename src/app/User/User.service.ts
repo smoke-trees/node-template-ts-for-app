@@ -97,11 +97,30 @@ export class UserService extends Service<User> {
 
 	async deleteAccount(userId: string) {
 		try {
-			const result = await this.dao.delete({ id: userId })
-			if (result.status.error) {
-				return result
+			if (settings.userSoftDelete) {
+				const userResult = await this.dao.read(userId)
+				if (userResult.status.error || !userResult.result) {
+					return new Result(true, ErrorCode.NotFound, 'User not found')
+				}
+				const originalEmail = userResult.result.email
+				const deletedEmail = `deleted_${Date.now()}_${originalEmail}`
+				const result = await this.dao.update(userId, {
+					isActive: false,
+					isSoftDeleted: true,
+					softDeletedAt: new Date(),
+					email: deletedEmail
+				})
+				if (result.status.error) {
+					return result
+				}
+				return new Result(false, ErrorCode.Success, 'Account deleted successfully')
+			} else {
+				const result = await this.dao.delete({ id: userId })
+				if (result.status.error) {
+					return result
+				}
+				return new Result(false, ErrorCode.Success, 'Account deleted successfully')
 			}
-			return new Result(false, ErrorCode.Success, 'Account deleted successfully')
 		} catch (error) {
 			log.error('Error deleting account', 'UserService.deleteAccount', error, {
 				userId
@@ -111,9 +130,11 @@ export class UserService extends Service<User> {
 	}
 
 	async login(email: string, password: string) {
-		const user = await this.dao.read({ where: { email: email.toLowerCase() } })
+		const user = await this.dao.read({
+			where: { email: email.toLowerCase(), isActive: true, isSoftDeleted: false }
+		})
 		if (user.status.error || !user.result) {
-			return user
+			return new Result(true, ErrorCode.NotAuthorized, 'User not found')
 		}
 		const hashedPassword = await bcrypt.compare(password, user.result.password)
 		if (!hashedPassword) {
@@ -136,7 +157,9 @@ export class UserService extends Service<User> {
 		consentAt?: Date | null,
 		consentVersion?: string | null
 	) {
-		const user = await this.dao.read({ where: { email: email.toLowerCase() } })
+		const user = await this.dao.read({
+			where: { email: email.toLowerCase(), isActive: true, isSoftDeleted: false }
+		})
 		if (user.result) {
 			return new Result(true, ErrorCode.NotAuthorized, 'User Already Exists')
 		}
@@ -167,7 +190,7 @@ export class UserService extends Service<User> {
 			preLinkCreate,
 			postLinkCreate
 		})
-		const userResult = await this.dao.read({ where: { email: email.toLowerCase() } })
+		const userResult = await this.dao.read(createUser.result!)
 		if (userResult.result && userResult.status.error === false) {
 			return this.generateTokens(userResult.result)
 		} else {
@@ -263,7 +286,7 @@ export class UserService extends Service<User> {
 					return new Result(true, ErrorCode.BadRequest, 'Error in verifying email')
 				}
 				const userResult = await this.dao.read(userId)
-				if (!userResult.result) {
+				if (!userResult.result || !userResult.result.isActive || userResult.result.isSoftDeleted) {
 					return new Result(true, ErrorCode.BadRequest, 'User not found')
 				}
 				if (data.email === userResult.result.email) {
@@ -287,6 +310,7 @@ export class UserService extends Service<User> {
           );
           */
 				}
+				await connection.del(`email-verify:${signingString}`)
 
 				return new Result(false, ErrorCode.Success, 'Verified email', {
 					link: data.redirectionLink,
@@ -358,8 +382,8 @@ export class UserService extends Service<User> {
 			}
 
 			const user = await this.dao.read(refreshData)
-			if (user.status.error || !user.result) {
-				return new Result(true, ErrorCode.InternalServerError, 'Unknown Error Occured')
+			if (user.status.error || !user.result || !user.result.isActive || user.result.isSoftDeleted) {
+				return new Result(true, ErrorCode.NotAuthorized, 'Invalid Token')
 			}
 			return this.generateTokens(user.result)
 		} catch (e) {
@@ -387,7 +411,9 @@ export class UserService extends Service<User> {
 	async forgotPasswordGetOTP(email: string) {
 		const normalizedEmail = email.toLowerCase()
 		const user = await this.dao.read({ where: { email: normalizedEmail } })
-		if (user.status.error || !user.result) return user
+		if (user.status.error || !user.result || !user.result.isActive || user.result.isSoftDeleted) {
+			return new Result(true, ErrorCode.NotFound, 'User not found')
+		}
 
 		if (user.result.emailVerified) {
 			const otp = process.env.NODE_ENV === 'production' ? Date.now().toString().slice(-6) : '123456'
