@@ -209,9 +209,14 @@ export class NotificationService extends Service<Notification> {
 				)
 			}
 		} catch (error) {
-			log.error('Error in sending FCM Notification to topic', 'sendMessageToTopic', error, {
-				topic
-			})
+			log.error(
+				'Error in sending FCM Notification to topic',
+				'NotificationService.sendMessageToTopic',
+				error,
+				{
+					topic
+				}
+			)
 			return new Result(
 				true,
 				ErrorCode.InternalServerError,

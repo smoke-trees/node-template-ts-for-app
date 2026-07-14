@@ -111,8 +111,8 @@ export class AuthMiddleware {
 
 				next()
 				return
-			} catch (e) {
-				log.error('Error in middleware', 'generateAuthMiddleware', e)
+			} catch (error) {
+				log.error('Error in middleware', 'AuthMiddleware.generateAuthMiddleware', error)
 				const result = new Result(true, ErrorCode.NotAuthorized, 'Not Authorized')
 				res.status(result.getStatus()).json(result)
 				return

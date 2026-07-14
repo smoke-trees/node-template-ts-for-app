@@ -61,7 +61,7 @@ export class User extends BaseEntity implements IUser {
 	@Column({ name: 'consent_version', type: 'varchar', nullable: true })
 	consentVersion?: string | null
 
-	@OneToMany(() => NotificationEntity, (notification) => notification.user)
+	@OneToMany(() => NotificationEntity, (notification) => notification.user, { cascade: true })
 	notification?: NotificationEntity[]
 
 	@OneToMany(() => DeviceInfoEntity, (device) => device.user)

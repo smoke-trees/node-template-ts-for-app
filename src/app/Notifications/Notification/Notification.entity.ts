@@ -105,7 +105,7 @@ export class Notification extends BaseEntity implements INotificationModel {
 	})
 	notificationFailureData!: any | null
 
-	@ManyToOne(() => User, (user) => user.notification)
+	@ManyToOne(() => User, (user) => user.notification, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'user_id' })
 	user?: User
 

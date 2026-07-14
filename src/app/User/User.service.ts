@@ -95,13 +95,19 @@ export class UserService extends Service<User> {
 		}
 	}
 
-	async resetSubscription(userId: string, purchaseId: string) {
-		// Subscription reset commented out as associated entities do not exist in this project
-		return new Result(
-			false,
-			ErrorCode.Success,
-			'Mock success - Subscription reset features not available'
-		)
+	async deleteAccount(userId: string) {
+		try {
+			const result = await this.dao.delete({ id: userId })
+			if (result.status.error) {
+				return result
+			}
+			return new Result(false, ErrorCode.Success, 'Account deleted successfully')
+		} catch (error) {
+			log.error('Error deleting account', 'UserService.deleteAccount', error, {
+				userId
+			})
+			return new Result(true, ErrorCode.InternalServerError, 'Error deleting account')
+		}
 	}
 
 	async login(email: string, password: string) {
@@ -220,9 +226,14 @@ export class UserService extends Service<User> {
 
 			return new Result(false, ErrorCode.Success, 'Generated email verification string', signature)
 		} catch (error) {
-			log.error('Error in generating verification string', 'createVerificationLink', error, {
-				userId
-			})
+			log.error(
+				'Error in generating verification string',
+				'UserService.createVerificationLink',
+				error,
+				{
+					userId
+				}
+			)
 			return new Result(
 				true,
 				ErrorCode.InternalServerError,
@@ -285,7 +296,7 @@ export class UserService extends Service<User> {
 				return new Result(true, ErrorCode.NotAuthorized, 'Invalid email used')
 			}
 		} catch (error) {
-			log.error('Error in verifying email', 'verifyEmail', error, {
+			log.error('Error in verifying email', 'UserService.verifyEmail', error, {
 				signingString
 			})
 			return new Result(true, ErrorCode.InternalServerError, 'Error in verifying email')
@@ -352,7 +363,7 @@ export class UserService extends Service<User> {
 			}
 			return this.generateTokens(user.result)
 		} catch (e) {
-			log.error('Error Refreshing token', 'refreshToken', e)
+			log.error('Error Refreshing token', 'UserService.refreshToken', e)
 			return new Result(true, ErrorCode.InternalServerError, 'Unknown Error Occured')
 		}
 	}
@@ -368,7 +379,7 @@ export class UserService extends Service<User> {
 			await connection.del(`refresh-token:${decodeToken.tid}`)
 			return new Result(false, ErrorCode.Success, 'Success')
 		} catch (e) {
-			log.error('Error Invalidating token', 'invalidateToken', e)
+			log.error('Error Invalidating token', 'UserService.invalidateToken', e)
 			return new Result(true, ErrorCode.InternalServerError, 'Unknown Error Occured')
 		}
 	}

@@ -124,6 +124,16 @@ export class UserController extends ServiceController<User> {
 				localMiddleware: []
 			},
 			{
+				path: '/delete-account',
+				method: Methods.POST,
+				handler: this.deleteAccountHandler.bind(this),
+				localMiddleware: [
+					authMiddleware.generateAuthMiddleWare({
+						userIdLoc: (req: Request) => req.body.userId
+					})
+				]
+			},
+			{
 				path: '/download-data',
 				method: Methods.GET,
 				handler: this.downloadDataHandler.bind(this),
@@ -662,5 +672,41 @@ export class UserController extends ServiceController<User> {
 			res.status(result.getStatus()).json(result)
 			return
 		}
+	}
+
+	@Documentation.addRoute({
+		path: '/user/delete-account',
+		tags: ['User'],
+		method: Methods.POST,
+		responses: {
+			200: {
+				description: 'Success',
+				value: { $ref: Documentation.getRef(Result) }
+			},
+			400: {
+				description: 'Bad Request',
+				value: { $ref: Documentation.getRef(Result) }
+			}
+		},
+		requestBody: {
+			type: 'object',
+			properties: {
+				userId: {
+					type: 'string'
+				}
+			},
+			required: ['userId']
+		}
+	})
+	async deleteAccountHandler(req: Request, res: Response) {
+		const { userId } = req.body
+		if (!userId) {
+			const result = new Result(true, ErrorCode.BadRequest, 'Request params missing')
+			res.status(result.getStatus()).json(result)
+			return
+		}
+		const result = await this.service.deleteAccount(userId)
+		res.status(result.getStatus()).json(result)
+		return
 	}
 }

@@ -56,7 +56,7 @@ export class DeviceInfo extends BaseEntity implements IDeviceInfoModel {
 	@Documentation.addField({ type: 'string', format: 'date-time' })
 	lastLoginTime!: Date | null
 
-	@ManyToOne(() => User, (user) => user.device)
+	@ManyToOne(() => User, (user) => user.device, { onDelete: 'CASCADE' })
 	@JoinColumn({ name: 'user_id' })
 	user?: User
 
