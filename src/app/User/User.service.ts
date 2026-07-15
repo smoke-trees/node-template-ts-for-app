@@ -8,7 +8,7 @@ import jwt from 'jsonwebtoken'
 import { _QueryDeepPartialEntity, SelectedRead } from '@smoke-trees/postgres-backend/dist/core/Dao'
 import { EntityManager, FindOneOptions, FindOptionsWhere, FindOptionsSelect } from 'typeorm'
 import { ContextProvider } from '@smoke-trees/smoke-context'
-import { UserType } from './IUser'
+import { IGCPTokenRes, IGCPUserInfo, UserType } from './IUser'
 import { DeviceInfoEntity } from '../Notifications/DeviceInfo'
 import { inject, injectable } from 'inversify'
 
@@ -507,7 +507,7 @@ export class UserService extends Service<User> {
 		}
 
 		const userResult = result.result as any
-		if (values.type === UserType.student && userResult?.id !== values.id) {
+		if (values.type === UserType.user && userResult?.id !== values.id) {
 			return new Result(true, ErrorCode.NotAuthorized, 'Not Authorized') as any
 		}
 		return result as any
@@ -542,5 +542,305 @@ export class UserService extends Service<User> {
 		delete values.emailVerified
 		delete values.email
 		return super.update(id, values, manager)
+	}
+
+	async getLoginWithAppleUrl() {
+		try {
+			const params = new URLSearchParams()
+			const responseType = 'code'
+			const scope = settings.appleLoginCreds.scope
+			params.set('client_id', settings.appleLoginCreds.clientId)
+			params.set('redirect_uri', settings.appleLoginCreds.redirectUri)
+			params.set('response_type', responseType)
+			params.set('scope', scope)
+			params.set('response_mode', settings.appleLoginCreds.responseMode)
+			const url = `${settings.appleLoginCreds.loginUrl}?${params.toString()}`
+			return new Result(false, ErrorCode.Success, 'Success', {
+				url,
+				responseType,
+				scope,
+				redirectUri: settings.appleLoginCreds.redirectUri,
+				clientId: settings.appleLoginCreds.clientId,
+				responseMode: settings.appleLoginCreds.responseMode
+			})
+		} catch (error) {
+			log.error('Error in getting apple login url', 'getLoginWithAppleUrl', error)
+			return new Result(true, ErrorCode.InternalServerError, 'Error in getting apple login url')
+		}
+	}
+
+	async googleAccessTokenCallback(accessToken: string) {
+		try {
+			const response = await fetch(settings.gcpLoginCreds.userInfoUrl, {
+				headers: { Authorization: `Bearer ${accessToken}` }
+			})
+
+			if (!response.ok) {
+				const errorPayload = await response.json().catch(() => ({}))
+				log.warn('Google user info fetch failed', 'googleAccessTokenCallback', { errorPayload })
+				return new Result(true, ErrorCode.NotAuthorized, 'Failed to fetch user info from Google')
+			}
+
+			const userInfo = (await response.json()) as IGCPUserInfo
+
+			if (!userInfo || !userInfo.email) {
+				return new Result(
+					true,
+					ErrorCode.BadRequest,
+					'Invalid user information received from Google'
+				)
+			}
+
+			const email = userInfo.email.toLowerCase()
+
+			const userCheck = await this.dao.read({
+				where: { email, isSoftDeleted: false }
+			})
+
+			if (userCheck.result) {
+				let needsUpdate = false
+				const updatePayload: Partial<User> = {}
+
+				if (!userCheck.result.isActive) {
+					updatePayload.isActive = true
+					userCheck.result.isActive = true
+					needsUpdate = true
+				}
+				if (!userCheck.result.emailVerified) {
+					updatePayload.emailVerified = true
+					userCheck.result.emailVerified = true
+					needsUpdate = true
+				}
+				if (!userCheck.result.googleUserId) {
+					updatePayload.googleUserId = userInfo.id
+					userCheck.result.googleUserId = userInfo.id
+					needsUpdate = true
+				}
+
+				if (needsUpdate) {
+					await this.dao.update(userCheck.result.id, updatePayload)
+				}
+
+				const tokens = await this.generateTokens(userCheck.result)
+				return new Result(false, ErrorCode.Success, 'Success', {
+					userExists: true,
+					skipReg: true,
+					tokens: tokens.result
+				})
+			} else {
+				const randomPassword = crypto.randomBytes(16).toString('hex')
+				const hashedPassword = this.hashPassword(randomPassword)
+
+				const userCreate = await this.dao.create({
+					email,
+					password: hashedPassword,
+					firstname: userInfo.given_name || undefined,
+					lastname: userInfo.family_name || undefined,
+					emailVerified: true,
+					googleUserId: userInfo.id
+				})
+
+				if (userCreate.result && typeof userCreate.result === 'string') {
+					const userData = await this.dao.read(userCreate.result)
+					if (!userData.result) {
+						return new Result(true, ErrorCode.InternalServerError, 'Error in creating user')
+					}
+					const tokens = await this.generateTokens(userData.result)
+					return new Result(false, ErrorCode.Success, 'Success', {
+						userExists: false,
+						email,
+						name: userInfo.name,
+						userId: userCreate.result,
+						tokens: tokens.result
+					})
+				} else {
+					return new Result(true, ErrorCode.InternalServerError, 'Error in creating user')
+				}
+			}
+		} catch (error) {
+			log.error('Error in google access token callback', 'googleAccessTokenCallback', error)
+			return new Result(
+				true,
+				ErrorCode.InternalServerError,
+				'Error in google access token callback'
+			)
+		}
+	}
+	async appleCallbackHandler(body: string) {
+		try {
+			const bodyObj = new URLSearchParams(body)
+			const code = bodyObj.get('code')
+			if (!code) {
+				return new Result(true, ErrorCode.BadRequest, 'Code not found')
+			}
+			const userToken = await this.appleTokenGet(code)
+			if (!userToken || !userToken.id_token) {
+				return new Result(true, ErrorCode.NotAuthorized, 'Invalid token response from Apple')
+			}
+			return this.handleAppleIdToken(userToken.id_token)
+		} catch (error) {
+			log.error('Error in apple callback handler', 'appleCallbackHandler', error)
+			return new Result(true, ErrorCode.InternalServerError, 'Error in apple callback handler')
+		}
+	}
+
+	async handleAppleIdToken(idToken: string, name?: string) {
+		try {
+			const decodedToken = jwt.decode(idToken) as { sub: string; email?: string }
+			if (!decodedToken || !decodedToken.sub) {
+				return new Result(true, ErrorCode.BadRequest, 'Invalid ID token')
+			}
+			const appleUserId = decodedToken.sub
+			const userEmail = decodedToken.email?.toLowerCase()
+
+			const filters: FindOptionsWhere<User>[] = []
+			filters.push({ appleUserId })
+			if (userEmail) {
+				filters.push({ email: userEmail })
+			}
+
+			const userCheck = await this.dao.read({ where: filters })
+
+			if (userCheck.result) {
+				let needsUpdate = false
+				const updatePayload: Partial<User> = {}
+
+				if (!userCheck.result.isActive) {
+					updatePayload.isActive = true
+					userCheck.result.isActive = true
+					needsUpdate = true
+				}
+				if (!userCheck.result.appleUserId) {
+					updatePayload.appleUserId = appleUserId
+					userCheck.result.appleUserId = appleUserId
+					needsUpdate = true
+				}
+
+				if (needsUpdate) {
+					await this.dao.update(userCheck.result.id, updatePayload)
+				}
+
+				const token = await this.generateTokens(userCheck.result)
+				return new Result(false, ErrorCode.Success, 'Success', {
+					userExists: true,
+					tokens: token.result
+				})
+			} else {
+				if (!userEmail) {
+					return new Result(
+						true,
+						ErrorCode.BadRequest,
+						'Email is required to register a new user via Apple'
+					)
+				}
+				const userCreate = await this.dao.create({
+					email: userEmail,
+					isActive: true,
+					emailVerified: true,
+					appleUserId,
+					type: UserType.user,
+					firstname: name?.split(' ')[0],
+					lastname: name?.split(' ').slice(1).join(' ')
+				})
+
+				if (userCreate.result && typeof userCreate.result === 'string') {
+					const userData = await this.dao.read(userCreate.result)
+					if (!userData.result) {
+						return new Result(true, ErrorCode.InternalServerError, 'Error in creating user')
+					}
+					const tokens = await this.generateTokens(userData.result)
+					return new Result(false, ErrorCode.Success, 'Success', {
+						userExists: false,
+						email: userEmail,
+						userId: userCreate.result,
+						tokens: tokens.result
+					})
+				} else {
+					return new Result(true, ErrorCode.InternalServerError, 'Error in creating user')
+				}
+			}
+		} catch (error) {
+			log.error('Error in handleAppleIdToken', 'handleAppleIdToken', error)
+			return new Result(true, ErrorCode.InternalServerError, 'Error in handleAppleIdToken')
+		}
+	}
+
+	async appleTokenGet(code: string) {
+		try {
+			const formData = new URLSearchParams()
+
+			formData.set('grant_type', 'authorization_code')
+			formData.set('code', code)
+			formData.set('client_id', settings.appleLoginCreds.clientId)
+			formData.set('client_secret', this.getAppleSecret())
+			formData.set('redirect_uri', settings.appleLoginCreds.redirectUri)
+			formData.set('scope', settings.appleLoginCreds.scope)
+
+			const response = await fetch(settings.appleLoginCreds.tokenUrl, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded'
+				},
+				body: formData
+			})
+
+			if (!response.ok) {
+				const errorPayload = await response.json().catch(() => ({}))
+				log.warn('Apple token exchange failed', 'appleTokenGet', { errorPayload })
+				throw new Error('Apple token exchange failed')
+			}
+
+			const responseData = (await response.json()) as Promise<any>
+			return responseData
+		} catch (error) {
+			log.error('Error in appleTokenGet', 'appleTokenGet', error)
+			throw error
+		}
+	}
+	getAppleSecret() {
+		const validity = '1m'
+		return jwt.sign(
+			{
+				iss: settings.appleLoginCreds.teamId,
+				aud: 'https://appleid.apple.com',
+				sub: settings.appleLoginCreds.clientId
+			},
+			settings.appleLoginCreds.clientSecret,
+			{
+				algorithm: 'ES256',
+				header: {
+					kid: settings.appleLoginCreds.keyId,
+					alg: 'ES256'
+				},
+				expiresIn: validity
+			}
+		)
+	}
+	async appleRevokeHandle(token: string) {
+		try {
+			const decode: any = jwt.decode(token)
+			if (!decode?.events) {
+				log.warn('UnHandled Apple Revoke Token', 'appleRevokeHandle', { token })
+				return new Result(true, ErrorCode.Success, 'Unhandled Apple Revoke Token')
+			}
+
+			const parsedEvent: { type: string; sub: string } = JSON.parse(decode.events)
+			if (parsedEvent.type !== 'consent-revoked') {
+				log.warn('UnHandled Apple Revoke Token', 'appleRevokeHandle', { token, parsedEvent })
+				return new Result(true, ErrorCode.Success, 'Unhandled Apple Revoke Token')
+			}
+			log.debug('Apple Revoke Token', 'appleRevokeHandle', { token, parsedEvent })
+			return this.dao.update(
+				{
+					appleUserId: parsedEvent.sub
+				},
+				{
+					isActive: false
+				}
+			)
+		} catch (error) {
+			log.error('Error in appleRevokeHandle', 'appleRevokeHandle', error)
+			return new Result(true, ErrorCode.InternalServerError, 'Error in appleRevokeHandle')
+		}
 	}
 }

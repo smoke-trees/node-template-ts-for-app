@@ -31,7 +31,7 @@ export class User extends BaseEntity implements IUser {
 	password!: string
 
 	@Documentation.addField({ type: 'string', enum: Object.values(UserType) })
-	@Column({ name: 'type', type: 'enum', enum: UserType, default: UserType.student })
+	@Column({ name: 'type', type: 'enum', enum: UserType, default: UserType.user })
 	type!: UserType
 
 	@Documentation.addField({ type: 'string' })
@@ -79,6 +79,14 @@ export class User extends BaseEntity implements IUser {
 	@Column({ name: 'soft_deleted_at', type: 'timestamp', nullable: true })
 	softDeletedAt!: Date | null
 
+	@Documentation.addField({ type: 'string' })
+	@Column({ name: 'google_user_id', type: 'varchar', nullable: true })
+	googleUserId?: string
+
+	@Documentation.addField({ type: 'string' })
+	@Column({ name: 'apple_user_id', type: 'varchar', nullable: true })
+	appleUserId?: string
+
 	constructor(it?: IUser) {
 		super()
 		if (it) {
@@ -97,10 +105,11 @@ export class User extends BaseEntity implements IUser {
 			this.consentVersion = it.consentVersion
 			this.isSoftDeleted = it.isSoftDeleted
 			this.softDeletedAt = it.softDeletedAt
+			this.appleUserId = it.appleUserId
+			this.googleUserId = it.googleUserId
 			if (it.id) {
 				this.id = it.id
 			}
-			
 		}
 	}
 }

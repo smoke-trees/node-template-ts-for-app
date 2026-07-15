@@ -8,7 +8,7 @@ import {
 	Result,
 	ServiceController
 } from '@smoke-trees/postgres-backend'
-import { Response, Request } from 'express'
+import { Response, Request, text } from 'express'
 import { User } from './User.entity'
 import { UserService } from './User.service'
 import { passwordRegex } from './IUser'
@@ -122,6 +122,30 @@ export class UserController extends ServiceController<User> {
 				method: Methods.POST,
 				handler: this.invalidTokenHandler.bind(this),
 				localMiddleware: []
+			},
+			{
+				path: '/login-with-apple',
+				localMiddleware: [],
+				method: Methods.GET,
+				handler: this.loginWithAppleUrlGetter.bind(this)
+			},
+			{
+				path: '/google-access-token-login',
+				localMiddleware: [],
+				method: Methods.POST,
+				handler: this.googleAccessTokenHandler.bind(this)
+			},
+			{
+				path: '/apple-hook',
+				method: Methods.POST,
+				localMiddleware: [text({ type: '*/*' })],
+				handler: this.appleHookHandler.bind(this)
+			},
+			{
+				path: '/apple-id-token',
+				method: Methods.POST,
+				localMiddleware: [],
+				handler: this.appleIdTokenHandler.bind(this)
 			},
 			{
 				path: '/delete-account',
@@ -708,5 +732,143 @@ export class UserController extends ServiceController<User> {
 		const result = await this.service.deleteAccount(userId)
 		res.status(result.getStatus()).json(result)
 		return
+	}
+
+	@Documentation.addRoute({
+		path: '/users/google-access-token-login',
+		tags: ['User'],
+		method: Methods.POST,
+		requestBody: {
+			type: 'object',
+			properties: {
+				accessToken: { type: 'string' }
+			},
+			required: ['accessToken']
+		},
+		responses: {
+			200: {
+				description: 'Success',
+				value: { $ref: Documentation.getRef(Result) }
+			},
+			400: {
+				description: 'Bad Request',
+				value: { $ref: Documentation.getRef(Result) }
+			}
+		}
+	})
+	async googleAccessTokenHandler(req: Request, res: Response) {
+		const { accessToken } = req.body
+		if (!accessToken) {
+			const result = new Result(true, ErrorCode.BadRequest, 'Req params missing')
+			res.status(result.getStatus()).json(result)
+			return
+		}
+		const result = await this.service.googleAccessTokenCallback(accessToken)
+		res.status(result.getStatus()).json(result)
+		return
+	}
+
+	@Documentation.addRoute({
+		path: '/users/login-with-apple',
+		tags: ['User'],
+		method: Methods.GET,
+		responses: {
+			200: {
+				description: 'Success',
+				value: {
+					$ref: Documentation.getRef(
+						Result<{
+							url: string
+							responseType: string
+							scope: string
+							redirectUri: string
+							clinetId: string
+						}>
+					)
+				}
+			},
+			400: {
+				description: 'Bad Request',
+				value: { $ref: Documentation.getRef(Result) }
+			}
+		}
+	})
+	async loginWithAppleUrlGetter(req: Request, res: Response) {
+		const result = await this.service.getLoginWithAppleUrl()
+		res.status(result.getStatus()).json(result)
+	}
+
+	@Documentation.addRoute({
+		path: '/users/apple-id-token',
+		tags: ['User'],
+		method: Methods.POST,
+		requestBody: {
+			type: 'object',
+			properties: {
+				code: { type: 'string' },
+				fullName: { type: 'string' }
+			}
+		},
+		responses: {
+			200: {
+				description: 'Success',
+				value: { $ref: Documentation.getRef(Result) }
+			},
+			400: {
+				description: 'Bad Request',
+				value: { $ref: Documentation.getRef(Result) }
+			}
+		}
+	})
+	async appleIdTokenHandler(req: Request, res: Response) {
+		log.debug('Apple token', 'appleIdTokenHandler', { body: req.body })
+		try {
+			const idToken = req.body.idToken || req.body.identityToken || req.body.code
+			if (!idToken) {
+				const result = new Result(true, ErrorCode.BadRequest, 'Missing Apple identity token')
+				res.status(result.getStatus()).json(result)
+				return
+			}
+			const result = await this.service.handleAppleIdToken(idToken, req.body.fullName)
+			res.status(result.getStatus()).json(result)
+		} catch (error) {
+			log.error('Error in appleIdTokenHandler', 'appleIdTokenHandler', error)
+			const result = new Result(true, ErrorCode.InternalServerError, 'Internal Server Error')
+			res.status(result.getStatus()).json(result)
+		}
+	}
+
+	async appleHookHandler(req: Request, res: Response) {
+		log.debug('Apple hook', 'appleHookHandler', { body: req.body, query: req.query })
+		try {
+			if (typeof req.body === 'string') {
+				const result = await this.service.appleCallbackHandler(req.body)
+				res.status(result.getStatus()).json(result)
+			} else if (req.body && typeof req.body === 'object') {
+				if (req.body.payload) {
+					// Consent revoked webhook
+					const result = await this.service.appleRevokeHandle(req.body.payload)
+					res.status(result.getStatus()).json(result)
+				} else if (req.body.code) {
+					// OAuth callback urlencoded body parsed as object
+					const params = new URLSearchParams()
+					for (const key of Object.keys(req.body)) {
+						params.set(key, req.body[key])
+					}
+					const result = await this.service.appleCallbackHandler(params.toString())
+					res.status(result.getStatus()).json(result)
+				} else {
+					const result = new Result(true, ErrorCode.BadRequest, 'Invalid Apple hook request')
+					res.status(result.getStatus()).json(result)
+				}
+			} else {
+				const result = new Result(true, ErrorCode.BadRequest, 'Invalid request body')
+				res.status(result.getStatus()).json(result)
+			}
+		} catch (error) {
+			log.error('Error in appleHookHandler', 'appleHookHandler', error)
+			const result = new Result(true, ErrorCode.InternalServerError, 'Internal Server Error')
+			res.status(result.getStatus()).json(result)
+		}
 	}
 }

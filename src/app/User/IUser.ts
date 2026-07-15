@@ -15,12 +15,32 @@ export interface IUser {
 	consentGiven?: boolean | null
 	consentAt?: Date | null
 	consentVersion?: string | null
+	appleUserId?: string
+	googleUserId?: string
 }
 
 export enum UserType {
-	student = 'student',
+	user = 'user',
 	ops = 'ops',
 	admin = 'admin'
+}
+
+export interface IGCPTokenRes {
+	access_token: string
+	expires_in: number
+	scope: string
+	token_type: string
+	id_token: string
+}
+
+export interface IGCPUserInfo {
+	id: string
+	email: string
+	verified_email: boolean
+	name: string
+	given_name: string
+	family_name: string
+	picture: string
 }
 
 const capsAlpha = [

@@ -31,6 +31,21 @@ export class ApplicationSettings extends Settings {
 		universe_domain: string
 	}
 
+	gcpLoginCreds: {
+		userInfoUrl: string
+	}
+	appleLoginCreds: {
+		loginUrl: string
+		scope: string
+		responseMode: string
+		redirectUri: string
+		clientId: string
+		clientSecret: string
+		teamId: string
+		keyId: string
+		tokenUrl: string
+	}
+
 	constructor() {
 		super()
 		this.databaseType = 'postgres'
@@ -48,6 +63,26 @@ export class ApplicationSettings extends Settings {
 		this.frontEndUrl = this.getValue('FRONTEND_URL', 'http://localhost:3000')
 		this.appName = this.getValue('APP_NAME', 'Application')
 		this.userSoftDelete = this.getValue('USER_SOFT_DELETE', 'true') === 'true'
+		this.gcpLoginCreds = {
+			userInfoUrl: this.getValue(
+				'GCP_USER_INFO_URL',
+				'https://www.googleapis.com/oauth2/v1/userinfo'
+			)
+		}
+		this.appleLoginCreds = {
+			loginUrl: this.getValue('APPLE_LOGIN_URL', 'https://appleid.apple.com/auth/authorize'),
+			scope: this.getValue('APPLE_LOGIN_SCOPE', 'email name'),
+			responseMode: this.getValue('APPLE_LOGIN_RESPONSE_MODE', 'form_post'),
+			redirectUri: this.getValue(
+				'APPLE_LOGIN_REDIRECT_URI',
+				'https://fomo-backend.smoketrees.in/users/apple-hook'
+			),
+			clientId: this.getValue('APPLE_LOGIN_CLIENT_ID', 'staging.login.test'),
+			clientSecret: this.getValue('APPLE_LOGIN_CLIENT_SECRET', ''),
+			teamId: this.getValue('APPLE_LOGIN_TEAM_ID', ''),
+			keyId: this.getValue('APPLE_LOGIN_KEY_ID', ''),
+			tokenUrl: this.getValue('APPLE_LOGIN_TOKEN_URL', 'https://appleid.apple.com/auth/token')
+		}
 	}
 
 	get defaultAppSettings(): Record<string, string> {

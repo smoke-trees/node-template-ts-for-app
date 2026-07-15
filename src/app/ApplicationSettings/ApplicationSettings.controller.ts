@@ -1,8 +1,4 @@
-import {
-	Application,
-	Controller,
-	ServiceController
-} from '@smoke-trees/postgres-backend'
+import { Application, Controller, ServiceController } from '@smoke-trees/postgres-backend'
 import { RequestHandler } from 'express'
 import { ParsedQs } from 'qs'
 import { ApplicationSettings } from './ApplicationSettings.entity'
@@ -25,20 +21,14 @@ export class ApplicationSettingsController extends ServiceController<Application
 		@inject(AuthMiddleware)
 		readonly authMiddleware: AuthMiddleware
 	) {
-		super(
-			app,
-			ApplicationSettings,
-			service,
-			undefined,
-			{
-				create: [authMiddleware.generateAuthMiddleWare({ adminOnly: true })],
-				update: [authMiddleware.generateAuthMiddleWare({ adminOnly: true })],
-				delete: [authMiddleware.generateAuthMiddleWare({ adminOnly: true })],
-				read: [authMiddleware.generateAuthMiddleWare({})],
-				readMany: [],
-				readManyWithoutPagination: []
-			}
-		)
+		super(app, ApplicationSettings, service, undefined, {
+			create: [authMiddleware.generateAuthMiddleWare({ adminOnly: true })],
+			update: [authMiddleware.generateAuthMiddleWare({ adminOnly: true })],
+			delete: [authMiddleware.generateAuthMiddleWare({ adminOnly: true })],
+			read: [authMiddleware.generateAuthMiddleWare({})],
+			readMany: [],
+			readManyWithoutPagination: []
+		})
 		this.service = service
 		this.controllers = []
 		this.mw = []
