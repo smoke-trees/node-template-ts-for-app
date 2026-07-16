@@ -197,9 +197,9 @@ export class NotificationController extends ServiceController<Notification> {
 			return
 		}
 		const context = ContextProvider.getContext().values as
-			| { id?: string; type?: UserType }
+			| { id?: string; userType?: UserType }
 			| undefined
-		if (context?.type !== UserType.admin && notification.result.userId !== context?.id) {
+		if (context?.userType !== UserType.admin && notification.result.userId !== context?.id) {
 			const result = new Result(true, ErrorCode.NotAuthorized, 'Not Authorized')
 			res.status(result.getStatus()).json(result)
 			return

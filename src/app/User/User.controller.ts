@@ -116,30 +116,18 @@ export class UserController extends ServiceController<User> {
 					})
 				]
 			},
-
 			{
 				path: '/invalidate-token',
 				method: Methods.POST,
 				handler: this.invalidTokenHandler.bind(this),
 				localMiddleware: []
 			},
-			{
-				path: '/login-with-apple',
-				localMiddleware: [],
-				method: Methods.GET,
-				handler: this.loginWithAppleUrlGetter.bind(this)
-			},
+		
 			{
 				path: '/google-access-token-login',
 				localMiddleware: [],
 				method: Methods.POST,
 				handler: this.googleAccessTokenHandler.bind(this)
-			},
-			{
-				path: '/apple-hook',
-				method: Methods.POST,
-				localMiddleware: [text({ type: '*/*' })],
-				handler: this.appleHookHandler.bind(this)
 			},
 			{
 				path: '/apple-id-token',
@@ -612,14 +600,14 @@ export class UserController extends ServiceController<User> {
 	})
 	async downloadDataHandler(req: Request, res: Response) {
 		try {
-			const context = ContextProvider.getContext()?.values as { id?: string; type?: UserType }
+			const context = ContextProvider.getContext()?.values as { id?: string; userType?: UserType }
 			if (!context?.id) {
 				const result = new Result(true, ErrorCode.NotAuthorized, 'User not authenticated')
 				res.status(result.getStatus()).json(result)
 				return
 			}
 			const requestedUserId = req.query.userId?.toString()
-			const isPrivileged = context.type === UserType.admin || context.type === UserType.ops
+			const isPrivileged = context.userType === UserType.admin || context.userType === UserType.ops
 			if (requestedUserId && !isPrivileged && requestedUserId !== context.id) {
 				const result = new Result(
 					true,
@@ -657,20 +645,20 @@ export class UserController extends ServiceController<User> {
 	})
 	async getNamesHandler(req: Request, res: Response) {
 		const userIds = req?.query?.ids
-		const type = req?.query?.type
+		const userType = req?.query?.userType
 
 		const { order, orderBy } = req.query
 
 		if (!userIds) {
 			const filter: FindOptionsWhere<User> = {
-				type: type ? (type.toString() as any) : undefined
+				userType: userType ? (userType.toString() as any) : undefined
 			}
 
 			const result = await this.service.dao.readMany({
 				where: filter,
 				order: (order as any) || 'DESC',
 				field: (orderBy as any) || 'createdAt',
-				dbOptions: { loadEagerRelations: false, select: ['firstname', 'lastname', 'id', 'type'] },
+				dbOptions: { loadEagerRelations: false, select: ['firstName', 'lastName', 'id', 'userType'] },
 				nonPaginated: true
 			})
 			res.status(result.getStatus()).json(result)
@@ -682,7 +670,7 @@ export class UserController extends ServiceController<User> {
 				field: 'createdAt',
 				nonPaginated: true,
 
-				dbOptions: { loadEagerRelations: false, select: ['firstname', 'lastname', 'id', 'type'] }
+				dbOptions: { loadEagerRelations: false, select: ['firstName', 'lastName', 'id', 'userType'] }
 			})
 			res.status(result.getStatus()).json(result)
 			return
@@ -691,7 +679,7 @@ export class UserController extends ServiceController<User> {
 				where: { id: userIds.toString() },
 				order: 'DESC',
 				field: 'createdAt',
-				dbOptions: { loadEagerRelations: false, select: ['firstname', 'lastname', 'id', 'type'] }
+				dbOptions: { loadEagerRelations: false, select: ['firstName', 'lastName', 'id', 'userType'] }
 			})
 			res.status(result.getStatus()).json(result)
 			return
@@ -741,7 +729,18 @@ export class UserController extends ServiceController<User> {
 		requestBody: {
 			type: 'object',
 			properties: {
-				accessToken: { type: 'string' }
+				accessToken: { type: 'string' },
+				firstName: { type: 'string' },
+				lastName: { type: 'string' },
+				consentGiven: {
+					type: 'boolean',
+				},
+				consentAt: {
+					type: 'string',
+				},
+				consentVersion: {
+					type: 'string',
+				}
 			},
 			required: ['accessToken']
 		},
@@ -757,45 +756,19 @@ export class UserController extends ServiceController<User> {
 		}
 	})
 	async googleAccessTokenHandler(req: Request, res: Response) {
-		const { accessToken } = req.body
+		const { accessToken, firstName, lastName,} = req.body
 		if (!accessToken) {
 			const result = new Result(true, ErrorCode.BadRequest, 'Req params missing')
 			res.status(result.getStatus()).json(result)
 			return
 		}
-		const result = await this.service.googleAccessTokenCallback(accessToken)
+		const result = await this.service.googleAccessTokenCallback(
+			accessToken,
+			firstName,
+			lastName,
+		)
 		res.status(result.getStatus()).json(result)
 		return
-	}
-
-	@Documentation.addRoute({
-		path: '/users/login-with-apple',
-		tags: ['User'],
-		method: Methods.GET,
-		responses: {
-			200: {
-				description: 'Success',
-				value: {
-					$ref: Documentation.getRef(
-						Result<{
-							url: string
-							responseType: string
-							scope: string
-							redirectUri: string
-							clinetId: string
-						}>
-					)
-				}
-			},
-			400: {
-				description: 'Bad Request',
-				value: { $ref: Documentation.getRef(Result) }
-			}
-		}
-	})
-	async loginWithAppleUrlGetter(req: Request, res: Response) {
-		const result = await this.service.getLoginWithAppleUrl()
-		res.status(result.getStatus()).json(result)
 	}
 
 	@Documentation.addRoute({
@@ -805,9 +778,11 @@ export class UserController extends ServiceController<User> {
 		requestBody: {
 			type: 'object',
 			properties: {
-				code: { type: 'string' },
-				fullName: { type: 'string' }
-			}
+				idToken: { type: 'string' },
+				firstName: { type: 'string' },
+				lastName: { type: 'string' }
+			},
+			required: ['idToken']
 		},
 		responses: {
 			200: {
@@ -829,7 +804,11 @@ export class UserController extends ServiceController<User> {
 				res.status(result.getStatus()).json(result)
 				return
 			}
-			const result = await this.service.handleAppleIdToken(idToken, req.body.fullName)
+			const result = await this.service.handleAppleIdToken(
+				idToken,
+				req.body.firstName,
+				req.body.lastName,
+			)
 			res.status(result.getStatus()).json(result)
 		} catch (error) {
 			log.error('Error in appleIdTokenHandler', 'appleIdTokenHandler', error)
@@ -838,37 +817,4 @@ export class UserController extends ServiceController<User> {
 		}
 	}
 
-	async appleHookHandler(req: Request, res: Response) {
-		log.debug('Apple hook', 'appleHookHandler', { body: req.body, query: req.query })
-		try {
-			if (typeof req.body === 'string') {
-				const result = await this.service.appleCallbackHandler(req.body)
-				res.status(result.getStatus()).json(result)
-			} else if (req.body && typeof req.body === 'object') {
-				if (req.body.payload) {
-					// Consent revoked webhook
-					const result = await this.service.appleRevokeHandle(req.body.payload)
-					res.status(result.getStatus()).json(result)
-				} else if (req.body.code) {
-					// OAuth callback urlencoded body parsed as object
-					const params = new URLSearchParams()
-					for (const key of Object.keys(req.body)) {
-						params.set(key, req.body[key])
-					}
-					const result = await this.service.appleCallbackHandler(params.toString())
-					res.status(result.getStatus()).json(result)
-				} else {
-					const result = new Result(true, ErrorCode.BadRequest, 'Invalid Apple hook request')
-					res.status(result.getStatus()).json(result)
-				}
-			} else {
-				const result = new Result(true, ErrorCode.BadRequest, 'Invalid request body')
-				res.status(result.getStatus()).json(result)
-			}
-		} catch (error) {
-			log.error('Error in appleHookHandler', 'appleHookHandler', error)
-			const result = new Result(true, ErrorCode.InternalServerError, 'Internal Server Error')
-			res.status(result.getStatus()).json(result)
-		}
-	}
 }

@@ -8,11 +8,9 @@ import jwt from 'jsonwebtoken'
 import { _QueryDeepPartialEntity, SelectedRead } from '@smoke-trees/postgres-backend/dist/core/Dao'
 import { EntityManager, FindOneOptions, FindOptionsWhere, FindOptionsSelect } from 'typeorm'
 import { ContextProvider } from '@smoke-trees/smoke-context'
-import { IGCPTokenRes, IGCPUserInfo, UserType } from './IUser'
+import { IGCPTokenRes, IGCPUserInfo, SignupType, UserType } from './IUser'
 import { DeviceInfoEntity } from '../Notifications/DeviceInfo'
 import { inject, injectable } from 'inversify'
-
-import database from '../../database'
 import RedisDatabaseObject from '../../redis/redis-connection'
 
 @injectable()
@@ -66,14 +64,14 @@ export class UserService extends Service<User> {
 				exportedOn: new Date().toISOString(),
 				personalInformation: {
 					id: user.id,
-					firstName: user.firstname ?? null,
-					lastName: user.lastname ?? null,
+					firstName: user.firstName ?? null,
+					lastName: user.lastName ?? null,
 					email: user.email,
 					emailVerified: user.emailVerified,
 					phoneNumber: user.phoneNumber ?? null,
 					country: user.country ?? null,
 					countryCode: user.countryCode ?? null,
-					accountType: user.type,
+					accountType: user.userType,
 					isActive: user.isActive,
 					registeredOn: toIso(user.createdAt),
 					lastUpdated: toIso(user.updatedAt)
@@ -169,6 +167,8 @@ export class UserService extends Service<User> {
 		const createUser = await this.dao.create({
 			email: email.toLowerCase(),
 			password: hashedPassword,
+			signupType: SignupType.email,
+			userType: UserType.user,
 			...(consentGiven ?
 				{
 					consentGiven: true,
@@ -337,6 +337,7 @@ export class UserService extends Service<User> {
 		const token = jwt.sign(
 			{
 				...safeUser,
+				type: user.userType,
 				userId: user.id,
 				tid,
 				tokenExpiry
@@ -496,7 +497,7 @@ export class UserService extends Service<User> {
 	): Promise<Result<SelectedRead<User, S> | null>> {
 		const { values } = ContextProvider.getContext()
 
-		if (!values?.type) {
+		if (!values?.userType) {
 			return new Result(true, ErrorCode.NotAuthorized, 'Not Authorized') as any
 		}
 
@@ -507,7 +508,7 @@ export class UserService extends Service<User> {
 		}
 
 		const userResult = result.result as any
-		if (values.type === UserType.user && userResult?.id !== values.id) {
+		if (values.userType === UserType.user && userResult?.id !== values.id) {
 			return new Result(true, ErrorCode.NotAuthorized, 'Not Authorized') as any
 		}
 		return result as any
@@ -517,59 +518,39 @@ export class UserService extends Service<User> {
 		id: string | number | FindOptionsWhere<User>,
 		values: {
 			id?: string | (() => string) | undefined
-			firstname?: (() => string) | (string | undefined)
-			lastname?: (() => string) | (string | undefined)
+			firstName?: (() => string) | (string | undefined)
+			lastName?: (() => string) | (string | undefined)
 			email?: string | (() => string) | undefined
 			emailVerified?: (() => string) | boolean | undefined
 			password?: string | (() => string) | undefined
-			type?: (() => string) | UserType | undefined
+			userType?: (() => string) | UserType | undefined
 			country?: (() => string) | (string | undefined)
 		},
 		manager?: EntityManager
 	): Promise<Result<number | null>> {
 		const context = ContextProvider.getContext().values
-		if (!context?.type) {
+		if (!context?.userType) {
 			return new Result(true, ErrorCode.NotAuthorized, 'Not Authorized')
 		}
-		if (context.type === UserType.admin) {
+		if (context.userType === UserType.admin) {
 			if (values.password) {
 				values.password = this.hashPassword(values.password as string)
 			}
 			return super.update(id, values, manager)
 		}
 		delete values.password
-		delete values.type
+		delete values.userType
 		delete values.emailVerified
 		delete values.email
 		return super.update(id, values, manager)
 	}
 
-	async getLoginWithAppleUrl() {
-		try {
-			const params = new URLSearchParams()
-			const responseType = 'code'
-			const scope = settings.appleLoginCreds.scope
-			params.set('client_id', settings.appleLoginCreds.clientId)
-			params.set('redirect_uri', settings.appleLoginCreds.redirectUri)
-			params.set('response_type', responseType)
-			params.set('scope', scope)
-			params.set('response_mode', settings.appleLoginCreds.responseMode)
-			const url = `${settings.appleLoginCreds.loginUrl}?${params.toString()}`
-			return new Result(false, ErrorCode.Success, 'Success', {
-				url,
-				responseType,
-				scope,
-				redirectUri: settings.appleLoginCreds.redirectUri,
-				clientId: settings.appleLoginCreds.clientId,
-				responseMode: settings.appleLoginCreds.responseMode
-			})
-		} catch (error) {
-			log.error('Error in getting apple login url', 'getLoginWithAppleUrl', error)
-			return new Result(true, ErrorCode.InternalServerError, 'Error in getting apple login url')
-		}
-	}
 
-	async googleAccessTokenCallback(accessToken: string) {
+	async googleAccessTokenCallback(
+		accessToken: string,
+		firstName?: string,
+		lastName?: string,
+	) {
 		try {
 			const response = await fetch(settings.gcpLoginCreds.userInfoUrl, {
 				headers: { Authorization: `Bearer ${accessToken}` }
@@ -616,6 +597,25 @@ export class UserService extends Service<User> {
 					userCheck.result.googleUserId = userInfo.id
 					needsUpdate = true
 				}
+				if (
+					!userCheck.result.firstName &&
+					(firstName || userInfo.given_name || userInfo.name?.split(' ')[0])
+				) {
+					const fName = firstName || userInfo.given_name || userInfo.name?.split(' ')[0]
+					updatePayload.firstName = fName
+					userCheck.result.firstName = fName
+					needsUpdate = true
+				}
+				if (
+					!userCheck.result.lastName &&
+					(lastName || userInfo.family_name || userInfo.name?.split(' ').slice(1).join(' '))
+				) {
+					const lName =
+						lastName || userInfo.family_name || userInfo.name?.split(' ').slice(1).join(' ')
+					updatePayload.lastName = lName
+					userCheck.result.lastName = lName
+					needsUpdate = true
+				}
 
 				if (needsUpdate) {
 					await this.dao.update(userCheck.result.id, updatePayload)
@@ -633,11 +633,20 @@ export class UserService extends Service<User> {
 
 				const userCreate = await this.dao.create({
 					email,
-					password: hashedPassword,
-					firstname: userInfo.given_name || undefined,
-					lastname: userInfo.family_name || undefined,
+					firstName: firstName || userInfo.given_name || userInfo.name?.split(' ')[0] || undefined,
+					lastName:
+						lastName ||
+						userInfo.family_name ||
+						userInfo.name?.split(' ').slice(1).join(' ') ||
+						undefined,
 					emailVerified: true,
-					googleUserId: userInfo.id
+					googleUserId: userInfo.id,
+					userType: UserType.user,
+					signupType: SignupType.google,
+					password: hashedPassword,
+					consentAt: new Date(),
+					consentVersion: '1.0.0',
+					consentGiven: true
 				})
 
 				if (userCreate.result && typeof userCreate.result === 'string') {
@@ -650,6 +659,8 @@ export class UserService extends Service<User> {
 						userExists: false,
 						email,
 						name: userInfo.name,
+						firstName: userData.result.firstName,
+						lastName: userData.result.lastName,
 						userId: userCreate.result,
 						tokens: tokens.result
 					})
@@ -666,25 +677,13 @@ export class UserService extends Service<User> {
 			)
 		}
 	}
-	async appleCallbackHandler(body: string) {
-		try {
-			const bodyObj = new URLSearchParams(body)
-			const code = bodyObj.get('code')
-			if (!code) {
-				return new Result(true, ErrorCode.BadRequest, 'Code not found')
-			}
-			const userToken = await this.appleTokenGet(code)
-			if (!userToken || !userToken.id_token) {
-				return new Result(true, ErrorCode.NotAuthorized, 'Invalid token response from Apple')
-			}
-			return this.handleAppleIdToken(userToken.id_token)
-		} catch (error) {
-			log.error('Error in apple callback handler', 'appleCallbackHandler', error)
-			return new Result(true, ErrorCode.InternalServerError, 'Error in apple callback handler')
-		}
-	}
 
-	async handleAppleIdToken(idToken: string, name?: string) {
+
+	async handleAppleIdToken(
+		idToken: string,
+		firstName?: string,
+		lastName?: string,
+	) {
 		try {
 			const decodedToken = jwt.decode(idToken) as { sub: string; email?: string }
 			if (!decodedToken || !decodedToken.sub) {
@@ -715,6 +714,18 @@ export class UserService extends Service<User> {
 					userCheck.result.appleUserId = appleUserId
 					needsUpdate = true
 				}
+				if (!userCheck.result.firstName && firstName) {
+					const fName = firstName 
+					updatePayload.firstName = fName
+					userCheck.result.firstName = fName
+					needsUpdate = true
+				}
+				if (!userCheck.result.lastName && lastName) {
+					const lName = lastName 
+					updatePayload.lastName = lName
+					userCheck.result.lastName = lName
+					needsUpdate = true
+				}
 
 				if (needsUpdate) {
 					await this.dao.update(userCheck.result.id, updatePayload)
@@ -733,14 +744,20 @@ export class UserService extends Service<User> {
 						'Email is required to register a new user via Apple'
 					)
 				}
+				const randomPassword = crypto.randomBytes(16).toString('hex')
+				const hashedPassword = this.hashPassword(randomPassword)
 				const userCreate = await this.dao.create({
 					email: userEmail,
-					isActive: true,
 					emailVerified: true,
 					appleUserId,
-					type: UserType.user,
-					firstname: name?.split(' ')[0],
-					lastname: name?.split(' ').slice(1).join(' ')
+					password: hashedPassword,
+					firstName: firstName ,
+					lastName: lastName ,
+					userType: UserType.user,
+					signupType: SignupType.apple,
+					consentAt: new Date(),
+					consentVersion: '1.0.0',
+					consentGiven: true
 				})
 
 				if (userCreate.result && typeof userCreate.result === 'string') {
@@ -752,6 +769,8 @@ export class UserService extends Service<User> {
 					return new Result(false, ErrorCode.Success, 'Success', {
 						userExists: false,
 						email: userEmail,
+						firstName: userData.result.firstName,
+						lastName: userData.result.lastName,
 						userId: userCreate.result,
 						tokens: tokens.result
 					})
@@ -765,82 +784,6 @@ export class UserService extends Service<User> {
 		}
 	}
 
-	async appleTokenGet(code: string) {
-		try {
-			const formData = new URLSearchParams()
 
-			formData.set('grant_type', 'authorization_code')
-			formData.set('code', code)
-			formData.set('client_id', settings.appleLoginCreds.clientId)
-			formData.set('client_secret', this.getAppleSecret())
-			formData.set('redirect_uri', settings.appleLoginCreds.redirectUri)
-			formData.set('scope', settings.appleLoginCreds.scope)
 
-			const response = await fetch(settings.appleLoginCreds.tokenUrl, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/x-www-form-urlencoded'
-				},
-				body: formData
-			})
-
-			if (!response.ok) {
-				const errorPayload = await response.json().catch(() => ({}))
-				log.warn('Apple token exchange failed', 'appleTokenGet', { errorPayload })
-				throw new Error('Apple token exchange failed')
-			}
-
-			const responseData = (await response.json()) as Promise<any>
-			return responseData
-		} catch (error) {
-			log.error('Error in appleTokenGet', 'appleTokenGet', error)
-			throw error
-		}
-	}
-	getAppleSecret() {
-		const validity = '1m'
-		return jwt.sign(
-			{
-				iss: settings.appleLoginCreds.teamId,
-				aud: 'https://appleid.apple.com',
-				sub: settings.appleLoginCreds.clientId
-			},
-			settings.appleLoginCreds.clientSecret,
-			{
-				algorithm: 'ES256',
-				header: {
-					kid: settings.appleLoginCreds.keyId,
-					alg: 'ES256'
-				},
-				expiresIn: validity
-			}
-		)
-	}
-	async appleRevokeHandle(token: string) {
-		try {
-			const decode: any = jwt.decode(token)
-			if (!decode?.events) {
-				log.warn('UnHandled Apple Revoke Token', 'appleRevokeHandle', { token })
-				return new Result(true, ErrorCode.Success, 'Unhandled Apple Revoke Token')
-			}
-
-			const parsedEvent: { type: string; sub: string } = JSON.parse(decode.events)
-			if (parsedEvent.type !== 'consent-revoked') {
-				log.warn('UnHandled Apple Revoke Token', 'appleRevokeHandle', { token, parsedEvent })
-				return new Result(true, ErrorCode.Success, 'Unhandled Apple Revoke Token')
-			}
-			log.debug('Apple Revoke Token', 'appleRevokeHandle', { token, parsedEvent })
-			return this.dao.update(
-				{
-					appleUserId: parsedEvent.sub
-				},
-				{
-					isActive: false
-				}
-			)
-		} catch (error) {
-			log.error('Error in appleRevokeHandle', 'appleRevokeHandle', error)
-			return new Result(true, ErrorCode.InternalServerError, 'Error in appleRevokeHandle')
-		}
-	}
 }

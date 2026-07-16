@@ -1,5 +1,5 @@
 import { BaseEntity, Documentation } from '@smoke-trees/postgres-backend'
-import { IUser, UserType } from './IUser'
+import { IUser, UserType, SignupType } from './IUser'
 import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm'
 import { NotificationEntity } from '../Notifications/Notification'
 import { DeviceInfoEntity } from '../Notifications/DeviceInfo'
@@ -12,12 +12,12 @@ export class User extends BaseEntity implements IUser {
 	id!: string
 
 	@Documentation.addField({ type: 'string' })
-	@Column({ name: 'firstname', type: 'varchar', nullable: true })
-	firstname?: string | undefined
+	@Column({ name: 'first_name', type: 'varchar', nullable: true })
+	firstName?: string | undefined
 
 	@Documentation.addField({ type: 'string' })
-	@Column({ name: 'lastname', type: 'varchar', nullable: true })
-	lastname?: string | undefined
+	@Column({ name: 'last_name', type: 'varchar', nullable: true })
+	lastName?: string | undefined
 
 	@Documentation.addField({ type: 'string' })
 	@Column({ name: 'email', type: 'varchar' })
@@ -31,8 +31,8 @@ export class User extends BaseEntity implements IUser {
 	password!: string
 
 	@Documentation.addField({ type: 'string', enum: Object.values(UserType) })
-	@Column({ name: 'type', type: 'enum', enum: UserType, default: UserType.user })
-	type!: UserType
+	@Column({ name: 'user_type', type: 'enum', enum: UserType, default: UserType.user })
+	userType!: UserType
 
 	@Documentation.addField({ type: 'string' })
 	@Column({ name: 'country', type: 'varchar', nullable: true })
@@ -87,12 +87,16 @@ export class User extends BaseEntity implements IUser {
 	@Column({ name: 'apple_user_id', type: 'varchar', nullable: true })
 	appleUserId?: string
 
+	@Documentation.addField({ type: 'string', enum: Object.values(SignupType) })
+	@Column({ name: 'signup_type', type: 'enum', enum: SignupType })
+	signupType!: SignupType
+
 	constructor(it?: IUser) {
 		super()
 		if (it) {
-			this.type = it.type
-			this.firstname = it.firstname
-			this.lastname = it.lastname
+			this.userType = it.userType
+			this.firstName = it.firstName
+			this.lastName = it.lastName
 			this.email = it.email
 			this.country = it.country
 			this.password = it.password
@@ -107,6 +111,7 @@ export class User extends BaseEntity implements IUser {
 			this.softDeletedAt = it.softDeletedAt
 			this.appleUserId = it.appleUserId
 			this.googleUserId = it.googleUserId
+			this.signupType = it.signupType
 			if (it.id) {
 				this.id = it.id
 			}

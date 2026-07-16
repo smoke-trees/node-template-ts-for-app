@@ -1,11 +1,11 @@
 export interface IUser {
 	id: string
-	firstname?: string
-	lastname?: string
+	firstName?: string
+	lastName?: string
 	email: string
 	emailVerified: boolean
 	password: string
-	type: UserType
+	userType: UserType
 	phoneNumber?: string
 	country?: string
 	countryCode?: string
@@ -17,12 +17,20 @@ export interface IUser {
 	consentVersion?: string | null
 	appleUserId?: string
 	googleUserId?: string
+	signupType: SignupType
 }
 
 export enum UserType {
 	user = 'user',
 	ops = 'ops',
 	admin = 'admin'
+}
+
+export enum SignupType {
+	email = 'email',
+	google = 'google',
+	apple = 'apple',
+	phone = 'phone'
 }
 
 export interface IGCPTokenRes {

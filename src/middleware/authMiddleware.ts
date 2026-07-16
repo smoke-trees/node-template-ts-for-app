@@ -76,11 +76,11 @@ export class AuthMiddleware {
 					return
 				}
 
-				if (user.result.type === UserType.admin) {
+				if (user.result.userType === UserType.admin) {
 					next()
 					return
 				}
-				if (opsBypass && user.result.type === UserType.ops) {
+				if (opsBypass && user.result.userType === UserType.ops) {
 					next()
 					return
 				}
@@ -89,11 +89,11 @@ export class AuthMiddleware {
 					res.status(result.getStatus()).json(result)
 					return
 				}
-				// if (user.result.type === UserType.ops) {
+				// if (user.result.userType === UserType.ops) {
 				//   next();
 				// }
 				if (opsOnly) {
-					if (user.result.type !== UserType.ops) {
+					if (user.result.userType !== UserType.ops) {
 						const result = new Result(true, ErrorCode.NotAuthorized, 'Not Authorized')
 						res.status(result.getStatus()).json(result)
 						return
