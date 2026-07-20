@@ -12,6 +12,7 @@ import { IGCPTokenRes, IGCPUserInfo, SignupType, UserType } from './IUser'
 import { DeviceInfoEntity } from '../Notifications/DeviceInfo'
 import { inject, injectable } from 'inversify'
 import RedisDatabaseObject from '../../redis/redis-connection'
+import { verifyAppleIdToken } from '../../utils/appleAuth'
 
 @injectable()
 export class UserService extends Service<User> {
@@ -128,23 +129,24 @@ export class UserService extends Service<User> {
 	}
 
 	async login(email: string, password: string) {
-		const user = await this.dao.read({
-			where: { email: email.toLowerCase(), isActive: true, isSoftDeleted: false }
-		})
-		if (user.status.error || !user.result) {
-			return new Result(true, ErrorCode.NotAuthorized, 'User not found')
-		}
-		const hashedPassword = await bcrypt.compare(password, user.result.password)
-		if (!hashedPassword) {
-			return new Result(true, ErrorCode.NotAuthorized, 'Incorrect Password')
-		}
-		if (user.result && user.status.error === false) {
+		try {
+			const user = await this.dao.read({
+				where: { email: email.toLowerCase(), isActive: true, isSoftDeleted: false }
+			})
+			if (user.status.error || !user.result) {
+				return new Result(true, ErrorCode.NotAuthorized, 'User not found')
+			}
+			const hashedPassword = await bcrypt.compare(password, user.result.password)
+			if (!hashedPassword) {
+				return new Result(true, ErrorCode.NotAuthorized, 'Incorrect Password')
+			}
 			if (!user.result.emailVerified) {
 				await this.createVerificationLink(user.result.id)
 			}
 			return this.generateTokens(user.result)
-		} else {
-			return new Result(true, ErrorCode.InternalServerError, user.message)
+		} catch (error) {
+			log.error('Error in login', 'UserService.login', error, { email })
+			return new Result(true, ErrorCode.InternalServerError, 'Error in login')
 		}
 	}
 
@@ -161,9 +163,9 @@ export class UserService extends Service<User> {
 		if (user.result) {
 			return new Result(true, ErrorCode.NotAuthorized, 'User Already Exists')
 		}
-		const preHash = Date.now()
+		const t0 = Date.now()
 		const hashedPassword = this.hashPassword(password)
-		const postHash = Date.now() - preHash
+		const hashDuration = Date.now() - t0
 		const createUser = await this.dao.create({
 			email: email.toLowerCase(),
 			password: hashedPassword,
@@ -177,18 +179,17 @@ export class UserService extends Service<User> {
 				}
 			:	{})
 		})
-		const postCreate = Date.now() - postHash
+		const createDuration = Date.now() - t0 - hashDuration
 		if (createUser.status.error || !createUser.result) {
 			return createUser
 		}
-		const preLinkCreate = Date.now() - postCreate
+		const t1 = Date.now()
 		await this.createVerificationLink(createUser.result.toString())
-		const postLinkCreate = Date.now() - preLinkCreate
+		const linkDuration = Date.now() - t1
 		log.debug('Signup timings', 'UserService/signUp', {
-			preHash,
-			postHash,
-			preLinkCreate,
-			postLinkCreate
+			hashDuration,
+			createDuration,
+			linkDuration
 		})
 		const userResult = await this.dao.read(createUser.result!)
 		if (userResult.result && userResult.status.error === false) {
@@ -289,12 +290,18 @@ export class UserService extends Service<User> {
 				if (!userResult.result || !userResult.result.isActive || userResult.result.isSoftDeleted) {
 					return new Result(true, ErrorCode.BadRequest, 'User not found')
 				}
-				if (data.email === userResult.result.email) {
-					await this.dao.update(userId, {
-						emailVerified: true
+				if (data.email !== userResult.result.email) {
+					log.warn('Email mismatch during verification', 'UserService.verifyEmail', {
+						userId,
+						storedEmail: data.email
 					})
-					// Send welcome email commented out as email services are removed
-					/*
+					return new Result(true, ErrorCode.BadRequest, 'Error in verifying email')
+				}
+				await this.dao.update(userId, {
+					emailVerified: true
+				})
+				// Send welcome email commented out as email services are removed
+				/*
           this.emailService.sendTemplateEmail(
             {
               templateName: EjsTemplates.welcome,
@@ -309,7 +316,6 @@ export class UserService extends Service<User> {
             { to: [userResult.result.email || data.email] }
           );
           */
-				}
 				await connection.del(`email-verify:${signingString}`)
 
 				return new Result(false, ErrorCode.Success, 'Verified email', {
@@ -339,9 +345,7 @@ export class UserService extends Service<User> {
 				...safeUser,
 				type: user.userType,
 				userId: user.id,
-				tid,
-				tokenExpiry
-				// exp: tokenExpiry,
+				tid
 			},
 			settings.jwtSecretKey,
 			{ algorithm: 'HS256', expiresIn: tokenExpiry }
@@ -420,30 +424,25 @@ export class UserService extends Service<User> {
 			const otp = process.env.NODE_ENV === 'production' ? Date.now().toString().slice(-6) : '123456'
 			const { connection } = await RedisDatabaseObject
 			await connection.set(`reset-password:${normalizedEmail}`, otp, 'EX', 15 * 60)
-			if (user.result?.email && user.result?.email === normalizedEmail) {
-				// Send OTP email commented out as email services are removed
-				/*
-        const sentResult = await this.emailService.sendTemplateEmail(
-          {
-            templateName: EjsTemplates.forgotPasswordOtp,
-            params: {
-              otp: otp,
-              privacyLink: `${settings.frontEndUrl}/privacy-policy`,
-              termsLink: `${settings.frontEndUrl}/terms-and-conditions`,
-            },
+			// Send OTP email commented out as email services are removed
+			/*
+      const sentResult = await this.emailService.sendTemplateEmail(
+        {
+          templateName: EjsTemplates.forgotPasswordOtp,
+          params: {
+            otp: otp,
+            privacyLink: `${settings.frontEndUrl}/privacy-policy`,
+            termsLink: `${settings.frontEndUrl}/terms-and-conditions`,
           },
-          { to: [user.result.email] }
-        );
+        },
+        { to: [user.result.email] }
+      );
 
-        if (sentResult.status.error) {
-          return new Result(true, ErrorCode.InternalServerError, "Error in sending OTP");
-        }
-        */
-
-				return new Result(false, ErrorCode.Success, 'Successfully sent OTP')
-			}
-
-			return new Result(true, ErrorCode.InternalServerError, 'Error in sending OTP')
+      if (sentResult.status.error) {
+        return new Result(true, ErrorCode.InternalServerError, "Error in sending OTP");
+      }
+      */
+			return new Result(false, ErrorCode.Success, 'Successfully sent OTP')
 		} else {
 			await this.createVerificationLink(user.result.id)
 			return new Result(
@@ -455,13 +454,22 @@ export class UserService extends Service<User> {
 	}
 
 	async forgotPasswordChange(email: string, otp: string, newPassword: string) {
-		const { connection } = await RedisDatabaseObject
-		const otpRead = await connection.get(`reset-password:${email}`)
-		if (!otpRead || otp !== otpRead) {
-			return new Result(true, ErrorCode.BadRequest, 'Incorrect OTP')
+		try {
+			const normalizedEmail = email.toLowerCase()
+			const { connection } = await RedisDatabaseObject
+			const otpRead = await connection.get(`reset-password:${normalizedEmail}`)
+			if (!otpRead || otp !== otpRead) {
+				return new Result(true, ErrorCode.BadRequest, 'Incorrect OTP')
+			}
+			const hashedPassword = this.hashPassword(newPassword)
+			await connection.del(`reset-password:${normalizedEmail}`)
+			return this.dao.update({ email: normalizedEmail }, { password: hashedPassword })
+		} catch (error) {
+			log.error('Error in forgotPasswordChange', 'UserService.forgotPasswordChange', error, {
+				email
+			})
+			return new Result(true, ErrorCode.InternalServerError, 'Error in changing password')
 		}
-		const hashedPassword = this.hashPassword(newPassword)
-		return this.dao.update({ email }, { password: hashedPassword })
 	}
 
 	async resetPassword(userId: string, oldPassword: string, newPassword: string) {
@@ -545,12 +553,7 @@ export class UserService extends Service<User> {
 		return super.update(id, values, manager)
 	}
 
-
-	async googleAccessTokenCallback(
-		accessToken: string,
-		firstName?: string,
-		lastName?: string,
-	) {
+	async googleAccessTokenCallback(accessToken: string, firstName?: string, lastName?: string) {
 		try {
 			const response = await fetch(settings.gcpLoginCreds.userInfoUrl, {
 				headers: { Authorization: `Bearer ${accessToken}` }
@@ -678,19 +681,14 @@ export class UserService extends Service<User> {
 		}
 	}
 
-
-	async handleAppleIdToken(
-		idToken: string,
-		firstName?: string,
-		lastName?: string,
-	) {
+	async handleAppleIdToken(idToken: string, firstName?: string, lastName?: string) {
 		try {
-			const decodedToken = jwt.decode(idToken) as { sub: string; email?: string }
-			if (!decodedToken || !decodedToken.sub) {
-				return new Result(true, ErrorCode.BadRequest, 'Invalid ID token')
+			const verifiedToken = await verifyAppleIdToken(idToken)
+			if (!verifiedToken) {
+				return new Result(true, ErrorCode.NotAuthorized, 'Invalid or expired Apple ID token')
 			}
-			const appleUserId = decodedToken.sub
-			const userEmail = decodedToken.email?.toLowerCase()
+			const appleUserId = verifiedToken.sub
+			const userEmail = verifiedToken.email?.toLowerCase()
 
 			const filters: FindOptionsWhere<User>[] = []
 			filters.push({ appleUserId })
@@ -715,13 +713,13 @@ export class UserService extends Service<User> {
 					needsUpdate = true
 				}
 				if (!userCheck.result.firstName && firstName) {
-					const fName = firstName 
+					const fName = firstName
 					updatePayload.firstName = fName
 					userCheck.result.firstName = fName
 					needsUpdate = true
 				}
 				if (!userCheck.result.lastName && lastName) {
-					const lName = lastName 
+					const lName = lastName
 					updatePayload.lastName = lName
 					userCheck.result.lastName = lName
 					needsUpdate = true
@@ -751,8 +749,8 @@ export class UserService extends Service<User> {
 					emailVerified: true,
 					appleUserId,
 					password: hashedPassword,
-					firstName: firstName ,
-					lastName: lastName ,
+					firstName: firstName,
+					lastName: lastName,
 					userType: UserType.user,
 					signupType: SignupType.apple,
 					consentAt: new Date(),
@@ -783,7 +781,4 @@ export class UserService extends Service<User> {
 			return new Result(true, ErrorCode.InternalServerError, 'Error in handleAppleIdToken')
 		}
 	}
-
-
-
 }

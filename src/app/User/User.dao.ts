@@ -1,4 +1,4 @@
-import { Dao, Database, ErrorCode, Result } from '@smoke-trees/postgres-backend'
+import { Dao, Database } from '@smoke-trees/postgres-backend'
 import { User } from './User.entity'
 import { inject, injectable } from 'inversify'
 
