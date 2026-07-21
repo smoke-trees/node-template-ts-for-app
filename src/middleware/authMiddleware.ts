@@ -8,6 +8,7 @@ import { inject, injectable } from 'inversify'
 import { UserType } from '../app/User/IUser'
 import { UserDao } from '../app/User/User.dao'
 import settings from '../settings'
+import { RedisDatabaseObject } from '../redis/redis-connection'
 
 @injectable()
 export class AuthMiddleware {
@@ -50,7 +51,19 @@ export class AuthMiddleware {
 				}
 				const tokenDecode = jwt.verify(token, settings.jwtSecretKey, {
 					algorithms: ['HS256']
-				}) as { id?: string; userId?: string }
+				}) as { id?: string; userId?: string; tid?: string }
+
+				// Check access token denylist — catches revoked sessions within the token's remaining lifetime
+				if (tokenDecode.tid) {
+					const { connection } = await RedisDatabaseObject
+					const isRevoked = await connection.get(`revoked-access:${tokenDecode.tid}`)
+					if (isRevoked) {
+						const result = new Result(true, ErrorCode.NotAuthorized, 'Session has been revoked')
+						res.status(result.getStatus()).json(result)
+						return
+					}
+				}
+
 				const tokenUserId = tokenDecode.userId ?? tokenDecode.id
 				if (!tokenUserId) {
 					const result = new Result(true, ErrorCode.NotAuthorized, 'Not Authorized')

@@ -102,9 +102,9 @@ export default class RedisPool {
 		})
 	}
 
-	del(key: KeyType): Promise<string | number | null> {
+	del(...keys: KeyType[]): Promise<string | number | null> {
 		return this._pool.acquire().then((connection) => {
-			return connection.del(key).finally(() => {
+			return connection.del(...(keys as [KeyType, ...KeyType[]])).finally(() => {
 				this._pool.release(connection)
 			})
 		})
@@ -145,9 +145,78 @@ export default class RedisPool {
 			})
 		})
 	}
+
 	expire(key: KeyType, seconds: number | string, mode: 'NX' | 'LT' | 'XX' | 'GT' = 'NX') {
 		return this._pool.acquire().then((connection) => {
 			return connection.expire(key, seconds, mode as any).finally(() => {
+				this._pool.release(connection)
+			})
+		})
+	}
+
+	/**
+	 * Add a member to a Redis Sorted Set with a score.
+	 * @param key Key for the sorted set
+	 * @param score Score (e.g. timestamp)
+	 * @param member Member value
+	 */
+	zadd(key: KeyType, score: number, member: string): Promise<number> {
+		return this._pool.acquire().then((connection) => {
+			return connection.zadd(key, score, member).finally(() => {
+				this._pool.release(connection)
+			})
+		})
+	}
+
+	/**
+	 * Remove and return the lowest-scored members from a Sorted Set.
+	 * @param key Key for the sorted set
+	 * @param count Number of members to pop (default 1)
+	 * @returns Array of [member, score] pairs
+	 */
+	zpopmin(key: KeyType, count = 1): Promise<string[]> {
+		return this._pool.acquire().then((connection) => {
+			return connection.zpopmin(key, count).finally(() => {
+				this._pool.release(connection)
+			})
+		})
+	}
+
+	/**
+	 * Get the number of members in a Sorted Set.
+	 * @param key Key for the sorted set
+	 */
+	zcard(key: KeyType): Promise<number> {
+		return this._pool.acquire().then((connection) => {
+			return connection.zcard(key).finally(() => {
+				this._pool.release(connection)
+			})
+		})
+	}
+
+	/**
+	 * Get members and scores from a Sorted Set (oldest → newest).
+	 * Returns a flat array [member, score, member, score, ...].
+	 * @param key Key for the sorted set
+	 * @param start Start index (0 = first)
+	 * @param stop Stop index (-1 = last)
+	 */
+	zrangeWithScores(key: KeyType, start: number, stop: number): Promise<string[]> {
+		return this._pool.acquire().then((connection) => {
+			return connection.zrange(key, start, stop, 'WITHSCORES').finally(() => {
+				this._pool.release(connection)
+			})
+		})
+	}
+
+	/**
+	 * Remove one or more members from a Sorted Set.
+	 * @param key Key for the sorted set
+	 * @param members Members to remove
+	 */
+	zrem(key: KeyType, ...members: string[]): Promise<number> {
+		return this._pool.acquire().then((connection) => {
+			return connection.zrem(key, ...members).finally(() => {
 				this._pool.release(connection)
 			})
 		})

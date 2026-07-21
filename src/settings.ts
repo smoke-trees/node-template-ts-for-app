@@ -16,6 +16,7 @@ export class ApplicationSettings extends Settings {
 	frontEndUrl: string
 	appName: string
 	userSoftDelete: boolean
+	maxSessionsPerUser: number
 	// Firebase Config for Firebase Cloud Messaging and download it from firebase console
 	firebaseCreds: {
 		type: string
@@ -44,6 +45,7 @@ export class ApplicationSettings extends Settings {
 		teamId: string
 		keyId: string
 		tokenUrl: string
+		appBundleId: string
 	}
 
 	constructor() {
@@ -63,6 +65,7 @@ export class ApplicationSettings extends Settings {
 		this.frontEndUrl = this.getValue('FRONTEND_URL', 'http://localhost:3000')
 		this.appName = this.getValue('APP_NAME', 'Application')
 		this.userSoftDelete = this.getValue('USER_SOFT_DELETE', 'true') === 'true'
+		this.maxSessionsPerUser = parseInt(this.getValue('MAX_SESSIONS_PER_USER', '5'), 10)
 		this.gcpLoginCreds = {
 			userInfoUrl: this.getValue(
 				'GCP_USER_INFO_URL',
@@ -81,7 +84,8 @@ export class ApplicationSettings extends Settings {
 			clientSecret: this.getValue('APPLE_LOGIN_CLIENT_SECRET', ''),
 			teamId: this.getValue('APPLE_LOGIN_TEAM_ID', ''),
 			keyId: this.getValue('APPLE_LOGIN_KEY_ID', ''),
-			tokenUrl: this.getValue('APPLE_LOGIN_TOKEN_URL', 'https://appleid.apple.com/auth/token')
+			tokenUrl: this.getValue('APPLE_LOGIN_TOKEN_URL', 'https://appleid.apple.com/auth/token'),
+			appBundleId: this.getValue('APPLE_APP_BUNDLE_ID', '')
 		}
 	}
 

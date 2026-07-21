@@ -8,10 +8,10 @@ import {
 	Result,
 	ServiceController
 } from '@smoke-trees/postgres-backend'
-import { Response, Request, text } from 'express'
+import { Response, Request } from 'express'
 import { User } from './User.entity'
 import { UserService } from './User.service'
-import { passwordRegex } from './IUser'
+import { passwordRegex } from '../../utils/password'
 import { FindOptionsWhere, In } from 'typeorm'
 import { inject, injectable } from 'inversify'
 import { AuthMiddleware } from '../../middleware/authMiddleware'
@@ -122,7 +122,7 @@ export class UserController extends ServiceController<User> {
 				handler: this.invalidTokenHandler.bind(this),
 				localMiddleware: []
 			},
-		
+
 			{
 				path: '/google-access-token-login',
 				localMiddleware: [],
@@ -134,6 +134,18 @@ export class UserController extends ServiceController<User> {
 				method: Methods.POST,
 				localMiddleware: [],
 				handler: this.appleIdTokenHandler.bind(this)
+			},
+			{
+				path: '/sessions',
+				method: Methods.GET,
+				handler: this.listSessionsHandler.bind(this),
+				localMiddleware: [authMiddleware.generateAuthMiddleWare({ contextOnly: true })]
+			},
+			{
+				path: '/sessions/:tid',
+				method: Methods.DELETE,
+				handler: this.revokeSessionHandler.bind(this),
+				localMiddleware: [authMiddleware.generateAuthMiddleWare({ contextOnly: true })]
 			},
 			{
 				path: '/delete-account',
@@ -454,6 +466,7 @@ export class UserController extends ServiceController<User> {
 	})
 	async signupHandler(req: Request, res: Response) {
 		const { email, password, consentGiven, consentAt, consentVersion } = req.body
+		const userAgent = req.headers['user-agent']
 		if (!email || !password) {
 			const result = new Result(true, ErrorCode.BadRequest, 'Request params missing')
 			res.status(result.getStatus()).json(result)
@@ -482,7 +495,8 @@ export class UserController extends ServiceController<User> {
 			password,
 			true,
 			consentAt ? new Date(consentAt) : new Date(),
-			consentVersion ?? '1.0.0'
+			consentVersion ?? '1.0.0',
+			userAgent
 		)
 		res.status(result.getStatus()).json(result)
 		return
@@ -518,12 +532,13 @@ export class UserController extends ServiceController<User> {
 	})
 	async loginHandler(req: Request, res: Response) {
 		const { email, password } = req.body
+		const userAgent = req.headers['user-agent']
 		if (!email || !password) {
 			const result = new Result(true, ErrorCode.BadRequest, 'Request params missing')
 			res.status(result.getStatus()).json(result)
 			return
 		}
-		const result = await this.service.login(email, password)
+		const result = await this.service.login(email, password, userAgent)
 		res.status(result.getStatus()).json(result)
 		return
 	}
@@ -658,7 +673,10 @@ export class UserController extends ServiceController<User> {
 				where: filter,
 				order: (order as any) || 'DESC',
 				field: (orderBy as any) || 'createdAt',
-				dbOptions: { loadEagerRelations: false, select: ['firstName', 'lastName', 'id', 'userType'] },
+				dbOptions: {
+					loadEagerRelations: false,
+					select: ['firstName', 'lastName', 'id', 'userType']
+				},
 				nonPaginated: true
 			})
 			res.status(result.getStatus()).json(result)
@@ -670,7 +688,10 @@ export class UserController extends ServiceController<User> {
 				field: 'createdAt',
 				nonPaginated: true,
 
-				dbOptions: { loadEagerRelations: false, select: ['firstName', 'lastName', 'id', 'userType'] }
+				dbOptions: {
+					loadEagerRelations: false,
+					select: ['firstName', 'lastName', 'id', 'userType']
+				}
 			})
 			res.status(result.getStatus()).json(result)
 			return
@@ -679,7 +700,10 @@ export class UserController extends ServiceController<User> {
 				where: { id: userIds.toString() },
 				order: 'DESC',
 				field: 'createdAt',
-				dbOptions: { loadEagerRelations: false, select: ['firstName', 'lastName', 'id', 'userType'] }
+				dbOptions: {
+					loadEagerRelations: false,
+					select: ['firstName', 'lastName', 'id', 'userType']
+				}
 			})
 			res.status(result.getStatus()).json(result)
 			return
@@ -723,7 +747,7 @@ export class UserController extends ServiceController<User> {
 	}
 
 	@Documentation.addRoute({
-		path: '/users/google-access-token-login',
+		path: '/user/google-access-token-login',
 		tags: ['User'],
 		method: Methods.POST,
 		requestBody: {
@@ -733,13 +757,13 @@ export class UserController extends ServiceController<User> {
 				firstName: { type: 'string' },
 				lastName: { type: 'string' },
 				consentGiven: {
-					type: 'boolean',
+					type: 'boolean'
 				},
 				consentAt: {
-					type: 'string',
+					type: 'string'
 				},
 				consentVersion: {
-					type: 'string',
+					type: 'string'
 				}
 			},
 			required: ['accessToken']
@@ -756,7 +780,8 @@ export class UserController extends ServiceController<User> {
 		}
 	})
 	async googleAccessTokenHandler(req: Request, res: Response) {
-		const { accessToken, firstName, lastName,} = req.body
+		const { accessToken, firstName, lastName } = req.body
+		const userAgent = req.headers['user-agent']
 		if (!accessToken) {
 			const result = new Result(true, ErrorCode.BadRequest, 'Req params missing')
 			res.status(result.getStatus()).json(result)
@@ -766,13 +791,14 @@ export class UserController extends ServiceController<User> {
 			accessToken,
 			firstName,
 			lastName,
+			userAgent
 		)
 		res.status(result.getStatus()).json(result)
 		return
 	}
 
 	@Documentation.addRoute({
-		path: '/users/apple-id-token',
+		path: '/user/apple-id-token',
 		tags: ['User'],
 		method: Methods.POST,
 		requestBody: {
@@ -799,6 +825,7 @@ export class UserController extends ServiceController<User> {
 		log.debug('Apple token', 'appleIdTokenHandler', { body: req.body })
 		try {
 			const idToken = req.body.idToken || req.body.identityToken || req.body.code
+			const userAgent = req.headers['user-agent']
 			if (!idToken) {
 				const result = new Result(true, ErrorCode.BadRequest, 'Missing Apple identity token')
 				res.status(result.getStatus()).json(result)
@@ -808,6 +835,7 @@ export class UserController extends ServiceController<User> {
 				idToken,
 				req.body.firstName,
 				req.body.lastName,
+				userAgent
 			)
 			res.status(result.getStatus()).json(result)
 		} catch (error) {
@@ -817,4 +845,97 @@ export class UserController extends ServiceController<User> {
 		}
 	}
 
+	@Documentation.addRoute({
+		path: '/user/sessions',
+		tags: ['User'],
+		method: Methods.GET,
+		description:
+			"List all active sessions for a user (newest first). Regular users see their own sessions. Admins and ops may pass ?userId= to view another user's sessions.",
+		parameters: [
+			{
+				name: 'userId',
+				in: 'query',
+				required: false,
+				description: 'Target user ID (admin/ops only). Defaults to the authenticated user.'
+			}
+		],
+		responses: {
+			200: {
+				description: 'Success — array of active sessions',
+				value: { $ref: Documentation.getRef(Result) }
+			},
+			401: {
+				description: 'Not Authorized',
+				value: { $ref: Documentation.getRef(Result) }
+			}
+		}
+	})
+	async listSessionsHandler(req: Request, res: Response) {
+		const context = ContextProvider.getContext()?.values as { id?: string; userType?: UserType }
+		if (!context?.id) {
+			const result = new Result(true, ErrorCode.NotAuthorized, 'Not Authorized')
+			res.status(result.getStatus()).json(result)
+			return
+		}
+		const isPrivileged = context.userType === UserType.admin || context.userType === UserType.ops
+		const requestedUserId = req.query.userId?.toString()
+		if (requestedUserId && !isPrivileged && requestedUserId !== context.id) {
+			const result = new Result(
+				true,
+				ErrorCode.NotAuthorized,
+				"Not authorized to view another user's sessions"
+			)
+			res.status(result.getStatus()).json(result)
+			return
+		}
+		const targetUserId = isPrivileged && requestedUserId ? requestedUserId : context.id
+		const result = await this.service.listSessions(targetUserId)
+		res.status(result.getStatus()).json(result)
+	}
+
+	@Documentation.addRoute({
+		path: '/user/sessions/{tid}',
+		tags: ['User'],
+		method: Methods.DELETE,
+		description:
+			'Revoke a specific session by its token ID (tid). Use to log out of a single device.',
+		parameters: [
+			{
+				name: 'tid',
+				in: 'path',
+				required: true,
+				description: 'The session token ID returned by GET /user/sessions'
+			}
+		],
+		responses: {
+			200: {
+				description: 'Session revoked',
+				value: { $ref: Documentation.getRef(Result) }
+			},
+			401: {
+				description: 'Not Authorized',
+				value: { $ref: Documentation.getRef(Result) }
+			},
+			400: {
+				description: 'Bad Request',
+				value: { $ref: Documentation.getRef(Result) }
+			}
+		}
+	})
+	async revokeSessionHandler(req: Request, res: Response) {
+		const context = ContextProvider.getContext()?.values as { id?: string }
+		if (!context?.id) {
+			const result = new Result(true, ErrorCode.NotAuthorized, 'Not Authorized')
+			res.status(result.getStatus()).json(result)
+			return
+		}
+		const { tid } = req.params
+		if (!tid) {
+			const result = new Result(true, ErrorCode.BadRequest, 'Session ID (tid) is required')
+			res.status(result.getStatus()).json(result)
+			return
+		}
+		const result = await this.service.revokeSession(context.id, tid)
+		res.status(result.getStatus()).json(result)
+	}
 }

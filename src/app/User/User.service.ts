@@ -96,6 +96,9 @@ export class UserService extends Service<User> {
 
 	async deleteAccount(userId: string) {
 		try {
+			// Revoke all active sessions before removing the account
+			await this.revokeAllSessions(userId)
+
 			if (settings.userSoftDelete) {
 				const userResult = await this.dao.read(userId)
 				if (userResult.status.error || !userResult.result) {
@@ -128,7 +131,7 @@ export class UserService extends Service<User> {
 		}
 	}
 
-	async login(email: string, password: string) {
+	async login(email: string, password: string, userAgent?: string) {
 		try {
 			const user = await this.dao.read({
 				where: { email: email.toLowerCase(), isActive: true, isSoftDeleted: false }
@@ -143,7 +146,7 @@ export class UserService extends Service<User> {
 			if (!user.result.emailVerified) {
 				await this.createVerificationLink(user.result.id)
 			}
-			return this.generateTokens(user.result)
+			return this.generateTokens(user.result, { loginMethod: SignupType.email, userAgent })
 		} catch (error) {
 			log.error('Error in login', 'UserService.login', error, { email })
 			return new Result(true, ErrorCode.InternalServerError, 'Error in login')
@@ -155,7 +158,8 @@ export class UserService extends Service<User> {
 		password: string,
 		consentGiven?: boolean | null,
 		consentAt?: Date | null,
-		consentVersion?: string | null
+		consentVersion?: string | null,
+		userAgent?: string
 	) {
 		const user = await this.dao.read({
 			where: { email: email.toLowerCase(), isActive: true, isSoftDeleted: false }
@@ -193,11 +197,10 @@ export class UserService extends Service<User> {
 		})
 		const userResult = await this.dao.read(createUser.result!)
 		if (userResult.result && userResult.status.error === false) {
-			return this.generateTokens(userResult.result)
+			return this.generateTokens(userResult.result, { loginMethod: SignupType.email, userAgent })
 		} else {
 			return new Result(true, ErrorCode.InternalServerError, 'Error in creating user')
 		}
-		// return new Result(false, ErrorCode.Success, "Sign Up Succesfull! A Verification Email is sent, Please verify your email. ");
 	}
 
 	async resendVerifyEmail(userId: string) {
@@ -333,11 +336,15 @@ export class UserService extends Service<User> {
 		}
 	}
 
-	async generateTokens(user: User) {
+	async generateTokens(
+		user: User,
+		options: { loginMethod: SignupType | 'email'; userAgent?: string } = { loginMethod: 'email' }
+	) {
 		const tid = crypto.randomUUID()
 		const refreshTokenId = crypto.randomUUID()
 		const tokenExpiry = settings.jwtTokenExpiry
 		const refreshExpiry = settings.jwtRefreshExpiry
+		const now = Date.now()
 
 		const { password, ...safeUser } = user
 		const token = jwt.sign(
@@ -351,19 +358,54 @@ export class UserService extends Service<User> {
 			{ algorithm: 'HS256', expiresIn: tokenExpiry }
 		)
 
-		const refreshToken = jwt.sign(
-			{
-				tid: refreshTokenId
-				// exp: refreshExpiry
-			},
-			settings.refreshSecretKey,
-			{
-				algorithm: 'HS256',
-				expiresIn: refreshExpiry
-			}
-		)
+		const refreshToken = jwt.sign({ tid: refreshTokenId }, settings.refreshSecretKey, {
+			algorithm: 'HS256',
+			expiresIn: refreshExpiry
+		})
+
 		const { connection } = await RedisDatabaseObject
+		const sessionKey = `user-sessions:${user.id}`
+
+		// Store the refresh token → userId mapping
 		await connection.set(`refresh-token:${refreshTokenId}`, user.id, 'EX', refreshExpiry)
+
+		// Store per-session metadata (loginMethod, userAgent, loginTime, accessTid for denylist)
+		const metaKey = `session-meta:${refreshTokenId}`
+		const metaFields: string[] = [
+			'loginTime',
+			String(now),
+			'loginMethod',
+			options.loginMethod,
+			'accessTid',
+			tid
+		]
+		if (options.userAgent) {
+			metaFields.push('userAgent', options.userAgent)
+		}
+		await connection.hset(metaKey, metaFields)
+		await connection.expire(metaKey, refreshExpiry)
+
+		// Add to user ZSET (score = login timestamp) and evict oldest if over limit
+		await connection.zadd(sessionKey, now, refreshTokenId)
+		await connection.expire(sessionKey, refreshExpiry, 'GT')
+
+		const sessionCount = await connection.zcard(sessionKey)
+		if (sessionCount > settings.maxSessionsPerUser) {
+			// ZPOPMIN returns [member, score, member, score, ...]
+			const evicted = await connection.zpopmin(
+				sessionKey,
+				sessionCount - settings.maxSessionsPerUser
+			)
+			for (let i = 0; i < evicted.length; i += 2) {
+				const evictedTid = evicted[i]
+				await connection.del(`refresh-token:${evictedTid}`, `session-meta:${evictedTid}`)
+				log.debug('Session evicted (max devices)', 'UserService.generateTokens', {
+					userId: user.id,
+					evictedTid
+				})
+			}
+		}
+
 		return new Result(false, ErrorCode.Success, 'Success', {
 			accessToken: token,
 			refreshToken,
@@ -386,11 +428,21 @@ export class UserService extends Service<User> {
 				return new Result(true, ErrorCode.NotAuthorized, 'Invalid Token')
 			}
 
+			// Preserve the old session's metadata before rotating
+			const oldMeta = await connection.hgetAll(`session-meta:${decodeToken.tid}`)
+
+			// Rotate: delete old token + ZSET entry + meta
+			await connection.del(`refresh-token:${decodeToken.tid}`, `session-meta:${decodeToken.tid}`)
+			await connection.zrem(`user-sessions:${refreshData}`, decodeToken.tid)
+
 			const user = await this.dao.read(refreshData)
 			if (user.status.error || !user.result || !user.result.isActive || user.result.isSoftDeleted) {
 				return new Result(true, ErrorCode.NotAuthorized, 'Invalid Token')
 			}
-			return this.generateTokens(user.result)
+
+			const loginMethod = (oldMeta?.loginMethod as SignupType | 'email') ?? 'email'
+			const userAgent = oldMeta?.userAgent as string | undefined
+			return this.generateTokens(user.result, { loginMethod, userAgent })
 		} catch (e) {
 			log.error('Error Refreshing token', 'UserService.refreshToken', e)
 			return new Result(true, ErrorCode.InternalServerError, 'Unknown Error Occured')
@@ -405,11 +457,117 @@ export class UserService extends Service<User> {
 
 			const { connection } = await RedisDatabaseObject
 
-			await connection.del(`refresh-token:${decodeToken.tid}`)
+			const userId = await connection.get(`refresh-token:${decodeToken.tid}`)
+			await connection.del(`refresh-token:${decodeToken.tid}`, `session-meta:${decodeToken.tid}`)
+			if (userId) {
+				await connection.zrem(`user-sessions:${userId}`, decodeToken.tid)
+			}
 			return new Result(false, ErrorCode.Success, 'Success')
 		} catch (e) {
 			log.error('Error Invalidating token', 'UserService.invalidateToken', e)
 			return new Result(true, ErrorCode.InternalServerError, 'Unknown Error Occured')
+		}
+	}
+
+	/**
+	 * Revokes all active refresh tokens for a user.
+	 * Called on password change, forgot-password, and account deletion.
+	 */
+	private async revokeAllSessions(userId: string) {
+		try {
+			const { connection } = await RedisDatabaseObject
+			const sessionKey = `user-sessions:${userId}`
+			// ZRANGEWITHSCORES returns flat [member, score, member, score, ...] — we only need members
+			const raw = await connection.zrangeWithScores(sessionKey, 0, -1)
+			const tids: string[] = []
+			for (let i = 0; i < raw.length; i += 2) tids.push(raw[i])
+			if (tids.length > 0) {
+				// Denylist all active access tokens immediately
+				for (const tid of tids) {
+					const meta = await connection.hgetAll(`session-meta:${tid}`)
+					if (meta?.accessTid) {
+						await connection.set(
+							`revoked-access:${meta.accessTid}`,
+							'1',
+							'EX',
+							settings.jwtTokenExpiry
+						)
+					}
+				}
+				const keysToDelete = tids.flatMap((tid: string) => [
+					`refresh-token:${tid}`,
+					`session-meta:${tid}`
+				])
+				await connection.del(...(keysToDelete as [string, ...string[]]))
+			}
+			await connection.del(sessionKey)
+			log.debug('All sessions revoked', 'UserService.revokeAllSessions', {
+				userId,
+				count: tids.length
+			})
+		} catch (error) {
+			log.error('Error revoking sessions', 'UserService.revokeAllSessions', error, { userId })
+		}
+	}
+
+	/**
+	 * Lists all active sessions for a user, including login time, method, and user agent.
+	 */
+	async listSessions(userId: string) {
+		try {
+			const { connection } = await RedisDatabaseObject
+			const sessionKey = `user-sessions:${userId}`
+			// flat array: [tid0, score0, tid1, score1, ...]
+			const raw = await connection.zrangeWithScores(sessionKey, 0, -1)
+			const sessions: {
+				tid: string
+				loginTime: number
+				loginMethod: string
+				userAgent?: string
+			}[] = []
+			for (let i = 0; i < raw.length; i += 2) {
+				const tid = raw[i]
+				const score = Number(raw[i + 1])
+				const meta = await connection.hgetAll(`session-meta:${tid}`)
+				sessions.push({
+					tid,
+					loginTime: meta?.loginTime ? Number(meta.loginTime) : score,
+					loginMethod: meta?.loginMethod ?? 'email',
+					...(meta?.userAgent ? { userAgent: meta.userAgent } : {})
+				})
+			}
+			// Return newest first
+			sessions.sort((a, b) => b.loginTime - a.loginTime)
+			return new Result(false, ErrorCode.Success, 'Success', sessions)
+		} catch (error) {
+			log.error('Error listing sessions', 'UserService.listSessions', error, { userId })
+			return new Result(true, ErrorCode.InternalServerError, 'Error listing sessions')
+		}
+	}
+
+	/**
+	 * Revokes a single session by tid, verifying it belongs to the requesting user.
+	 */
+	async revokeSession(userId: string, tid: string) {
+		try {
+			const { connection } = await RedisDatabaseObject
+			// Verify this session belongs to the user before revoking
+			const storedUserId = await connection.get(`refresh-token:${tid}`)
+			if (!storedUserId || storedUserId !== userId) {
+				return new Result(true, ErrorCode.NotAuthorized, 'Session not found or not owned by user')
+			}
+			// Denylist the access token so it is immediately rejected even before it expires
+			const meta = await connection.hgetAll(`session-meta:${tid}`)
+			if (meta?.accessTid) {
+				await connection.set(`revoked-access:${meta.accessTid}`, '1', 'EX', settings.jwtTokenExpiry)
+			}
+			await connection.del(`refresh-token:${tid}`, `session-meta:${tid}`)
+			await connection.zrem(`user-sessions:${userId}`, tid)
+			log.debug('Session revoked', 'UserService.revokeSession', { userId, tid })
+			return new Result(false, ErrorCode.Success, 'Session revoked')
+		} catch (error) {
+			log.error('Error revoking session', 'UserService.revokeSession', error, { userId, tid })
+			return new Result(true, ErrorCode.InternalServerError, 'Error revoking session')
 		}
 	}
 
@@ -463,7 +621,19 @@ export class UserService extends Service<User> {
 			}
 			const hashedPassword = this.hashPassword(newPassword)
 			await connection.del(`reset-password:${normalizedEmail}`)
-			return this.dao.update({ email: normalizedEmail }, { password: hashedPassword })
+			const updateResult = await this.dao.update(
+				{ email: normalizedEmail },
+				{ password: hashedPassword }
+			)
+			if (updateResult.status.error) {
+				return updateResult
+			}
+			// Look up userId to revoke sessions — email-based update doesn't return the id directly
+			const userResult = await this.dao.read({ where: { email: normalizedEmail } })
+			if (userResult.result) {
+				await this.revokeAllSessions(userResult.result.id)
+			}
+			return updateResult
 		} catch (error) {
 			log.error('Error in forgotPasswordChange', 'UserService.forgotPasswordChange', error, {
 				email
@@ -473,14 +643,25 @@ export class UserService extends Service<User> {
 	}
 
 	async resetPassword(userId: string, oldPassword: string, newPassword: string) {
-		const user = await this.dao.read(userId)
-		if (user.status.error || !user.result) return user
-		const oldHash = await bcrypt.compare(oldPassword, user.result.password)
-		if (!oldHash) {
-			return new Result(true, ErrorCode.NotAuthorized, 'Incorrect password')
+		try {
+			const user = await this.dao.read(userId)
+			if (user.status.error || !user.result) return user
+			const oldHash = await bcrypt.compare(oldPassword, user.result.password)
+			if (!oldHash) {
+				return new Result(true, ErrorCode.NotAuthorized, 'Incorrect password')
+			}
+			const newHash = this.hashPassword(newPassword)
+			const updateResult = await this.dao.update(user.result.id, { password: newHash })
+			if (updateResult.status.error) {
+				return updateResult
+			}
+			// Revoke all sessions — user must re-authenticate after a password change
+			await this.revokeAllSessions(userId)
+			return updateResult
+		} catch (error) {
+			log.error('Error resetting password', 'UserService.resetPassword', error, { userId })
+			return new Result(true, ErrorCode.InternalServerError, 'Error resetting password')
 		}
-		const newHash = this.hashPassword(newPassword)
-		return await this.dao.update(user.result.id, { password: newHash })
 	}
 
 	async create(
@@ -553,7 +734,12 @@ export class UserService extends Service<User> {
 		return super.update(id, values, manager)
 	}
 
-	async googleAccessTokenCallback(accessToken: string, firstName?: string, lastName?: string) {
+	async googleAccessTokenCallback(
+		accessToken: string,
+		firstName?: string,
+		lastName?: string,
+		userAgent?: string
+	) {
 		try {
 			const response = await fetch(settings.gcpLoginCreds.userInfoUrl, {
 				headers: { Authorization: `Bearer ${accessToken}` }
@@ -624,7 +810,10 @@ export class UserService extends Service<User> {
 					await this.dao.update(userCheck.result.id, updatePayload)
 				}
 
-				const tokens = await this.generateTokens(userCheck.result)
+				const tokens = await this.generateTokens(userCheck.result, {
+					loginMethod: SignupType.google,
+					userAgent
+				})
 				return new Result(false, ErrorCode.Success, 'Success', {
 					userExists: true,
 					skipReg: true,
@@ -657,7 +846,10 @@ export class UserService extends Service<User> {
 					if (!userData.result) {
 						return new Result(true, ErrorCode.InternalServerError, 'Error in creating user')
 					}
-					const tokens = await this.generateTokens(userData.result)
+					const tokens = await this.generateTokens(userData.result, {
+						loginMethod: SignupType.google,
+						userAgent
+					})
 					return new Result(false, ErrorCode.Success, 'Success', {
 						userExists: false,
 						email,
@@ -681,7 +873,12 @@ export class UserService extends Service<User> {
 		}
 	}
 
-	async handleAppleIdToken(idToken: string, firstName?: string, lastName?: string) {
+	async handleAppleIdToken(
+		idToken: string,
+		firstName?: string,
+		lastName?: string,
+		userAgent?: string
+	) {
 		try {
 			const verifiedToken = await verifyAppleIdToken(idToken)
 			if (!verifiedToken) {
@@ -729,7 +926,10 @@ export class UserService extends Service<User> {
 					await this.dao.update(userCheck.result.id, updatePayload)
 				}
 
-				const token = await this.generateTokens(userCheck.result)
+				const token = await this.generateTokens(userCheck.result, {
+					loginMethod: SignupType.apple,
+					userAgent
+				})
 				return new Result(false, ErrorCode.Success, 'Success', {
 					userExists: true,
 					tokens: token.result
@@ -763,7 +963,10 @@ export class UserService extends Service<User> {
 					if (!userData.result) {
 						return new Result(true, ErrorCode.InternalServerError, 'Error in creating user')
 					}
-					const tokens = await this.generateTokens(userData.result)
+					const tokens = await this.generateTokens(userData.result, {
+						loginMethod: SignupType.apple,
+						userAgent
+					})
 					return new Result(false, ErrorCode.Success, 'Success', {
 						userExists: false,
 						email: userEmail,
