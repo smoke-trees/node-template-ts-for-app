@@ -141,7 +141,7 @@ This backend is built using the smoke-trees ecosystem, specifically leveraging `
 ## Dao Functions
 
 - `read` function to read single entry from the database. Defaults to `id` field but can be passed a where clause using `{where: {field: value}}` object.
-- `readMany` function to read multiple entries from the database
+- `readMany` function to read multiple entries from the database. By default it will return 10 results, need to pass `nonPaginated: true` to get all results.
 - `create` function to create a new entry in the database
 - `update` function to update an existing entry in the database
 - `delete` function to delete an existing entry from the database
