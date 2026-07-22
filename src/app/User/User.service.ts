@@ -546,14 +546,14 @@ export class UserService extends Service<User> {
 	}
 
 	/**
-	 * Revokes a single session by tid, verifying it belongs to the requesting user.
+	 * Revokes a single session by tid, verifying it belongs to the target user or caller (admin/ops).
 	 */
-	async revokeSession(userId: string, tid: string) {
+	async revokeSession(targetUserId: string, tid: string, callerId?: string) {
 		try {
 			const { connection } = await RedisDatabaseObject
 			// Verify this session belongs to the user before revoking
 			const storedUserId = await connection.get(`refresh-token:${tid}`)
-			if (!storedUserId || storedUserId !== userId) {
+			if (!storedUserId || (storedUserId !== targetUserId && storedUserId !== callerId)) {
 				return new Result(true, ErrorCode.NotAuthorized, 'Session not found or not owned by user')
 			}
 			// Denylist the access token so it is immediately rejected even before it expires
@@ -562,11 +562,11 @@ export class UserService extends Service<User> {
 				await connection.set(`revoked-access:${meta.accessTid}`, '1', 'EX', settings.jwtTokenExpiry)
 			}
 			await connection.del(`refresh-token:${tid}`, `session-meta:${tid}`)
-			await connection.zrem(`user-sessions:${userId}`, tid)
-			log.debug('Session revoked', 'UserService.revokeSession', { userId, tid })
+			await connection.zrem(`user-sessions:${storedUserId}`, tid)
+			log.debug('Session revoked', 'UserService.revokeSession', { userId: storedUserId, tid })
 			return new Result(false, ErrorCode.Success, 'Session revoked')
 		} catch (error) {
-			log.error('Error revoking session', 'UserService.revokeSession', error, { userId, tid })
+			log.error('Error revoking session', 'UserService.revokeSession', error, { targetUserId, tid })
 			return new Result(true, ErrorCode.InternalServerError, 'Error revoking session')
 		}
 	}
@@ -715,6 +715,7 @@ export class UserService extends Service<User> {
 			password?: string | (() => string) | undefined
 			userType?: (() => string) | UserType | undefined
 			country?: (() => string) | (string | undefined)
+			isActive?: boolean | undefined
 		},
 		manager?: EntityManager
 	): Promise<Result<number | null>> {
@@ -722,6 +723,15 @@ export class UserService extends Service<User> {
 		if (!context?.userType) {
 			return new Result(true, ErrorCode.NotAuthorized, 'Not Authorized')
 		}
+
+		if (values.isActive === false) {
+			const targetUserId =
+				typeof id === 'string' ? id : typeof id === 'number' ? id.toString() : undefined
+			if (targetUserId) {
+				await this.revokeAllSessions(targetUserId)
+			}
+		}
+
 		if (context.userType === UserType.admin) {
 			if (values.password) {
 				values.password = this.hashPassword(values.password as string)

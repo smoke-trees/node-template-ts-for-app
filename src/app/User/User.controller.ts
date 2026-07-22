@@ -923,7 +923,7 @@ export class UserController extends ServiceController<User> {
 		}
 	})
 	async revokeSessionHandler(req: Request, res: Response) {
-		const context = ContextProvider.getContext()?.values as { id?: string }
+		const context = ContextProvider.getContext()?.values as { id?: string; userType?: UserType }
 		if (!context?.id) {
 			const result = new Result(true, ErrorCode.NotAuthorized, 'Not Authorized')
 			res.status(result.getStatus()).json(result)
@@ -935,7 +935,11 @@ export class UserController extends ServiceController<User> {
 			res.status(result.getStatus()).json(result)
 			return
 		}
-		const result = await this.service.revokeSession(context.id, tid)
+		const isPrivileged = context.userType === UserType.admin || context.userType === UserType.ops
+		const requestedUserId = req.query.userId?.toString() || req.body?.userId?.toString()
+		const targetUserId = isPrivileged && requestedUserId ? requestedUserId : context.id
+
+		const result = await this.service.revokeSession(targetUserId, tid, context.id)
 		res.status(result.getStatus()).json(result)
 	}
 }
