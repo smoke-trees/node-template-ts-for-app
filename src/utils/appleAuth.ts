@@ -53,4 +53,3 @@ export async function verifyAppleIdToken(idToken: string): Promise<AppleTokenPay
 		return null
 	}
 }
-

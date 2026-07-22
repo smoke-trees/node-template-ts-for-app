@@ -28,11 +28,12 @@ export class ApplicationSettings extends BaseEntity {
 	id!: string
 
 	@Documentation.addField({ type: 'string' })
-	@Column({ type: 'varchar', unique: true })
+	@Column({ name: 'name', type: 'varchar', unique: true })
 	name!: string
 
 	@Documentation.addField({ type: 'object' })
-	@Column({ type: 'json' })
+	@Column({ name: 'value', type: 'json' })
+	/* eslint-disable-next-line @typescript-eslint/no-explicit-any */
 	value!: any
 
 	@Documentation.addField({
@@ -40,11 +41,11 @@ export class ApplicationSettings extends BaseEntity {
 		enum: Object.values(SettingTypes),
 		default: SettingTypes.STRING
 	})
-	@Column({ type: 'enum', enum: SettingTypes, default: SettingTypes.STRING })
+	@Column({ name: 'type', type: 'enum', enum: SettingTypes, default: SettingTypes.STRING })
 	type!: SettingTypes
 
 	@Documentation.addField({ type: 'boolean' })
-	@Column({ type: 'boolean', nullable: true, default: false })
+	@Column({ name: 'is_public', type: 'boolean', nullable: true, default: false })
 	isPublic!: boolean
 
 	constructor(it?: IApplicationSettingsCreate) {

@@ -166,13 +166,13 @@ options = {
 
 ### Which login methods pass `userAgent`
 
-| Entry point | `loginMethod` | `userAgent` |
-|-------------|---------------|-------------|
-| `POST /user/login` | `email` | ✅ from `req.headers['user-agent']` |
-| `POST /user/sign-up` | `email` | ✅ from `req.headers['user-agent']` |
-| `POST /user/google-access-token-login` | `google` | ✅ from `req.headers['user-agent']` |
-| `POST /user/apple-id-token` | `apple` | ✅ from `req.headers['user-agent']` |
-| Token rotation (`POST /user/refresh-token`) | inherited | inherited from old session |
+| Entry point                                 | `loginMethod` | `userAgent`                         |
+| ------------------------------------------- | ------------- | ----------------------------------- |
+| `POST /user/login`                          | `email`       | ✅ from `req.headers['user-agent']` |
+| `POST /user/sign-up`                        | `email`       | ✅ from `req.headers['user-agent']` |
+| `POST /user/google-access-token-login`      | `google`      | ✅ from `req.headers['user-agent']` |
+| `POST /user/apple-id-token`                 | `apple`       | ✅ from `req.headers['user-agent']` |
+| Token rotation (`POST /user/refresh-token`) | inherited     | inherited from old session          |
 
 ---
 
@@ -259,10 +259,10 @@ Any future request using `tid-A`'s refresh token will get `401 Invalid Token`.
 
 ### Access control
 
-| Caller | `?userId` absent | `?userId` = own ID | `?userId` = other user's ID |
-|--------|------------------|--------------------|------------------------------|
-| Regular user | ✅ own sessions | ✅ own sessions | ❌ 401 |
-| Admin / Ops | ✅ own sessions | ✅ own sessions | ✅ target user's sessions |
+| Caller       | `?userId` absent | `?userId` = own ID | `?userId` = other user's ID |
+| ------------ | ---------------- | ------------------ | --------------------------- |
+| Regular user | ✅ own sessions  | ✅ own sessions    | ❌ 401                      |
+| Admin / Ops  | ✅ own sessions  | ✅ own sessions    | ✅ target user's sessions   |
 
 Admins and ops pass `?userId=<targetId>` to view another user's sessions on the same endpoint.
 
@@ -283,22 +283,22 @@ sort by loginTime DESC
 
 ```json
 {
-  "status": { "error": false, "code": 200 },
-  "message": "Success",
-  "result": [
-    {
-      "tid": "3f8c2b1a-0000-0000-0000-000000000001",
-      "loginTime": 1753012345678,
-      "loginMethod": "apple",
-      "userAgent": "MyApp/2.1 (iPhone; iOS 18.0; Scale/3.00)"
-    },
-    {
-      "tid": "9d4e7f2c-0000-0000-0000-000000000002",
-      "loginTime": 1752998765432,
-      "loginMethod": "email",
-      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
-    }
-  ]
+	"status": { "error": false, "code": 200 },
+	"message": "Success",
+	"result": [
+		{
+			"tid": "3f8c2b1a-0000-0000-0000-000000000001",
+			"loginTime": 1753012345678,
+			"loginMethod": "apple",
+			"userAgent": "MyApp/2.1 (iPhone; iOS 18.0; Scale/3.00)"
+		},
+		{
+			"tid": "9d4e7f2c-0000-0000-0000-000000000002",
+			"loginTime": 1752998765432,
+			"loginMethod": "email",
+			"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+		}
+	]
 }
 ```
 
@@ -404,10 +404,10 @@ Every authenticated request:
 
 **TTL correctness**:
 
-| Key | TTL | Why |
-|-----|-----|-----|
-| `revoked-access:<accessTid>` | `JWT_TOKEN_EXPIRY` | Same lifetime as the access token — once the token expires naturally, `jwt.verify` rejects it anyway and the denylist entry is no longer needed |
-| `session-meta:<refreshId>` | `JWT_REFRESH_EXPIRY` | Meta must live as long as the session can be renewed |
+| Key                          | TTL                  | Why                                                                                                                                             |
+| ---------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `revoked-access:<accessTid>` | `JWT_TOKEN_EXPIRY`   | Same lifetime as the access token — once the token expires naturally, `jwt.verify` rejects it anyway and the denylist entry is no longer needed |
+| `session-meta:<refreshId>`   | `JWT_REFRESH_EXPIRY` | Meta must live as long as the session can be renewed                                                                                            |
 
 ---
 
@@ -446,25 +446,26 @@ POST /user/delete-account   (authenticated)
 All session management endpoints are under the `/user` prefix.
 
 ### Auth header (required for 🔒 routes)
+
 ```
 Authorization: Bearer <accessToken>
 ```
 
 ---
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `POST` | `/user/login` | — | Email + password login |
-| `POST` | `/user/sign-up` | — | Register new account |
-| `POST` | `/user/google-access-token-login` | — | Login with Google access token |
-| `POST` | `/user/apple-id-token` | — | Login with Apple ID token |
-| `POST` | `/user/refresh-token` | — | Rotate refresh token (returns new pair) |
-| `POST` | `/user/invalidate-token` | — | Logout (revoke current session) |
-| `GET` | `/user/sessions` | 🔒 | List sessions. Admins may pass `?userId=` to view any user's sessions |
-| `DELETE` | `/user/sessions/:tid` | 🔒 | Revoke a specific session (+ denylist its access token) |
-| `POST` | `/user/reset-password` | 🔒 | Change password (revokes all sessions immediately) |
-| `POST` | `/user/forgot-password-change-password` | — | OTP password reset (revokes all sessions immediately) |
-| `POST` | `/user/delete-account` | 🔒 | Delete account (revokes all sessions immediately) |
+| Method   | Path                                    | Auth | Description                                                           |
+| -------- | --------------------------------------- | ---- | --------------------------------------------------------------------- |
+| `POST`   | `/user/login`                           | —    | Email + password login                                                |
+| `POST`   | `/user/sign-up`                         | —    | Register new account                                                  |
+| `POST`   | `/user/google-access-token-login`       | —    | Login with Google access token                                        |
+| `POST`   | `/user/apple-id-token`                  | —    | Login with Apple ID token                                             |
+| `POST`   | `/user/refresh-token`                   | —    | Rotate refresh token (returns new pair)                               |
+| `POST`   | `/user/invalidate-token`                | —    | Logout (revoke current session)                                       |
+| `GET`    | `/user/sessions`                        | 🔒   | List sessions. Admins may pass `?userId=` to view any user's sessions |
+| `DELETE` | `/user/sessions/:tid`                   | 🔒   | Revoke a specific session (+ denylist its access token)               |
+| `POST`   | `/user/reset-password`                  | 🔒   | Change password (revokes all sessions immediately)                    |
+| `POST`   | `/user/forgot-password-change-password` | —    | OTP password reset (revokes all sessions immediately)                 |
+| `POST`   | `/user/delete-account`                  | 🔒   | Delete account (revokes all sessions immediately)                     |
 
 Full Swagger documentation is available at `/docs` when the server is running.
 
@@ -472,25 +473,25 @@ Full Swagger documentation is available at `/docs` when the server is running.
 
 ## 11. Configuration
 
-| Environment Variable | Default | Description |
-|---------------------|---------|-------------|
-| `JWT_TOKEN_EXPIRY` | `1d` | Access token lifetime. Parsed by `parseTimespanToSeconds` — supports `s`, `m`, `h`, `d`, `w`, `y` suffixes. Stored as **seconds** (`number`). |
-| `JWT_REFRESH_EXPIRY` | `7d` | Refresh token lifetime. Same suffix support. Stored as **seconds** (`number`). |
-| `JWT_SECRET` | `mysecretjwt` | Signing key for access tokens. **Must be changed in production.** |
-| `REFRESH_SECRET` | `mysecretrefresh` | Signing key for refresh tokens. **Must be changed in production.** |
-| `MAX_SESSIONS_PER_USER` | `5` | Max concurrent sessions per user. Oldest evicted when exceeded. |
+| Environment Variable    | Default           | Description                                                                                                                                   |
+| ----------------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `JWT_TOKEN_EXPIRY`      | `1d`              | Access token lifetime. Parsed by `parseTimespanToSeconds` — supports `s`, `m`, `h`, `d`, `w`, `y` suffixes. Stored as **seconds** (`number`). |
+| `JWT_REFRESH_EXPIRY`    | `7d`              | Refresh token lifetime. Same suffix support. Stored as **seconds** (`number`).                                                                |
+| `JWT_SECRET`            | `mysecretjwt`     | Signing key for access tokens. **Must be changed in production.**                                                                             |
+| `REFRESH_SECRET`        | `mysecretrefresh` | Signing key for refresh tokens. **Must be changed in production.**                                                                            |
+| `MAX_SESSIONS_PER_USER` | `5`               | Max concurrent sessions per user. Oldest evicted when exceeded.                                                                               |
 
 ---
 
 ## 12. Redis Key Reference
 
-| Key Pattern | Type | TTL | Purpose |
-|------------|------|-----|---------|
-| `refresh-token:<refreshId>` | STRING | `JWT_REFRESH_EXPIRY` | Maps refresh token ID → userId |
-| `session-meta:<refreshId>` | HASH | `JWT_REFRESH_EXPIRY` | Stores loginTime, loginMethod, accessTid, userAgent |
-| `user-sessions:<userId>` | ZSET | `JWT_REFRESH_EXPIRY` (GT) | Session index, scored by login time |
-| `revoked-access:<accessTid>` | STRING | `JWT_TOKEN_EXPIRY` | Access token denylist — instant revocation |
-| `reset-password:<email>` | STRING | 15 min | OTP for forgot-password flow |
+| Key Pattern                  | Type   | TTL                       | Purpose                                             |
+| ---------------------------- | ------ | ------------------------- | --------------------------------------------------- |
+| `refresh-token:<refreshId>`  | STRING | `JWT_REFRESH_EXPIRY`      | Maps refresh token ID → userId                      |
+| `session-meta:<refreshId>`   | HASH   | `JWT_REFRESH_EXPIRY`      | Stores loginTime, loginMethod, accessTid, userAgent |
+| `user-sessions:<userId>`     | ZSET   | `JWT_REFRESH_EXPIRY` (GT) | Session index, scored by login time                 |
+| `revoked-access:<accessTid>` | STRING | `JWT_TOKEN_EXPIRY`        | Access token denylist — instant revocation          |
+| `reset-password:<email>`     | STRING | 15 min                    | OTP for forgot-password flow                        |
 
 ### Key lifecycle summary
 

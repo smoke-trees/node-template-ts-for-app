@@ -260,6 +260,7 @@ export class NotificationService extends Service<Notification> {
 		const notification = this.createNotificationBody(body)
 		if (body.receiverType === NotificationReceivers.User) {
 			if (body.receiverIds && body.receiverIds.length > 0) {
+				//Admin dont want to wait for all notifications to complete.
 				body.receiverIds.forEach((e) => this.sendFCMNotificationToUser(e, notification))
 			}
 		}

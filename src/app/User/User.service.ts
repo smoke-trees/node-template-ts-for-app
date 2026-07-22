@@ -684,23 +684,24 @@ export class UserService extends Service<User> {
 		filter: string | number | (Omit<FindOneOptions<User>, 'select'> & { select?: S }),
 		manager?: EntityManager
 	): Promise<Result<SelectedRead<User, S> | null>> {
-		const { values } = ContextProvider.getContext()
-
-		if (!values?.userType) {
-			return new Result(true, ErrorCode.NotAuthorized, 'Not Authorized') as any
-		}
+		const context = ContextProvider.getContext()
+		const values = context?.values
 
 		const result = await super.readOne(filter, manager)
 
-		if (!result.result) {
-			return result as any
+		if (!result.result || !values) {
+			return result
 		}
 
-		const userResult = result.result as any
+		const userResult = result.result as unknown as User
 		if (values.userType === UserType.user && userResult?.id !== values.id) {
-			return new Result(true, ErrorCode.NotAuthorized, 'Not Authorized') as any
+			return new Result(
+				true,
+				ErrorCode.NotAuthorized,
+				'Not Authorized'
+			) as unknown as Result<SelectedRead<User, S> | null>
 		}
-		return result as any
+		return result
 	}
 
 	async update(

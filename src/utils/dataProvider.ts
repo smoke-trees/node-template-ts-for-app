@@ -1,3 +1,5 @@
+import { log } from '@smoke-trees/postgres-backend'
+
 const api = 'http://localhost:8080'
 
 export function authFetch(url: string | URL | Request, options?: RequestInit) {
@@ -90,7 +92,7 @@ export const dataProvider = {
 			.then((res) => res.json())
 			.then((data) => data as Result<TResult>)
 			.catch((e) => {
-				console.error(e)
+				log.error('DataProvider request failed', 'dataProvider', e)
 				throw e
 			})
 	},
@@ -131,7 +133,7 @@ export const dataProvider = {
 			.then((res) => res.json())
 			.then((data) => data as Result<TResult>)
 			.catch((e) => {
-				console.error(e)
+				log.error('DataProvider request failed', 'dataProvider', e)
 				throw e
 			})
 	},
@@ -150,7 +152,7 @@ export const dataProvider = {
 					} else {
 						params.append(
 							`like[${e}]`,
-							`%${(queryParams.like as any)![e as string | keyof TResult] ?? ''}%`
+							`%${(queryParams.like as Record<string, string>)[e] ?? ''}%`
 						)
 					}
 				})
@@ -183,7 +185,7 @@ export const dataProvider = {
 			.then((res) => res.json())
 			.then((data) => data as TResult)
 			.catch((e) => {
-				console.error(e)
+				log.error('DataProvider request failed', 'dataProvider', e)
 				throw e
 			})
 	},
@@ -232,7 +234,7 @@ export const dataProvider = {
 			.then((res) => res.json())
 			.then((data) => data as Result<TResult[]>)
 			.catch((e) => {
-				console.error(e)
+				log.error('DataProvider request failed', 'dataProvider', e)
 				throw e
 			})
 	},
@@ -274,7 +276,7 @@ export const dataProvider = {
 			.then((res) => res.json())
 			.then((data) => data as Result<TResult>)
 			.catch((e) => {
-				console.error(e)
+				log.error('DataProvider request failed', 'dataProvider', e)
 				throw e
 			})
 	},
@@ -313,7 +315,7 @@ export const dataProvider = {
 			.then((res) => res.json())
 			.then((data) => data as Result<TResult>)
 			.catch((e) => {
-				console.error(e)
+				log.error('DataProvider request failed', 'dataProvider', e)
 				throw e
 			})
 	}
