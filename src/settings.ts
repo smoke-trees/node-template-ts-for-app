@@ -17,6 +17,15 @@ export class ApplicationSettings extends Settings {
 	appName: string
 	userSoftDelete: boolean
 	maxSessionsPerUser: number
+	// AWS storage config
+	awsAccessKey: string;
+	awsSecretKey: string;
+	awsRegion: string;
+  	awsProfileName: string;
+  	defaultEmailSender: string;
+  	s3Bucket: string;
+  	s3Folder: string;
+
 	// Firebase Config for Firebase Cloud Messaging and download it from firebase console
 	firebaseCreds: {
 		type: string
@@ -66,6 +75,13 @@ export class ApplicationSettings extends Settings {
 		this.appName = this.getValue('APP_NAME', 'Application')
 		this.userSoftDelete = this.getValue('USER_SOFT_DELETE', 'true') === 'true'
 		this.maxSessionsPerUser = parseInt(this.getValue('MAX_SESSIONS_PER_USER', '5'), 10)
+		this.awsAccessKey = this.getValue('AWS_ACCESS_KEY', '')
+		this.awsSecretKey = this.getValue('AWS_SECRET_KEY', '')
+		this.awsRegion = this.getValue('AWS_REGION', '')
+		this.awsProfileName = this.getValue('AWS_PROFILE_NAME', '')
+		this.defaultEmailSender = this.getValue('DEFAULT_EMAIL_SENDER', '')
+		this.s3Bucket = this.getValue('S3_BUCKET', '')
+		this.s3Folder = this.getValue('S3_FOLDER', '')
 		this.gcpLoginCreds = {
 			userInfoUrl: this.getValue(
 				'GCP_USER_INFO_URL',

@@ -1,5 +1,6 @@
 allowBuilds:
   '@firebase/util': false
   '@scarf/scarf': false
+  aws-sdk: true
   bcrypt: false
   protobufjs: false

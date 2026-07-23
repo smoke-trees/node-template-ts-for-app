@@ -239,8 +239,8 @@ export class UserService extends Service<User> {
         {
           templateName: EjsTemplates.emailVerification,
           params: {
-            firstname: user.result?.firstname || "User",
-            lastname: user.result?.lastname || "User",
+            firstName: user.result?.firstName || "User",
+            lastName: user.result?.lastName || "User",
             verificationLink: `${settings.frontEndUrl}/verify-email/${signature}`,
             termsLink: `${settings.frontEndUrl}/terms-and-conditions`,
             privacyLink: `${settings.frontEndUrl}/privacy-policy`,
@@ -308,8 +308,8 @@ export class UserService extends Service<User> {
             {
               templateName: EjsTemplates.welcome,
               params: {
-                firstname: userResult.result.firstname || "",
-                lastname: userResult.result.lastname || "",
+                firstName: userResult.result.firstName || "",
+                lastName: userResult.result.lastName || "",
                 termsLink: `${settings.frontEndUrl}/terms-and-conditions`,
                 privacyLink: `${settings.frontEndUrl}/privacy-policy`,
                 websiteLink: `${settings.frontEndUrl}`,
