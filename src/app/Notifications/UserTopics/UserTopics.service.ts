@@ -65,4 +65,20 @@ export class UserTopicsService extends Service<UserTopics> {
 			return new Result(true, ErrorCode.InternalServerError, 'Error getting topic users')
 		}
 	}
+
+	async getAllTopics() {
+		try {
+			const res = await this.dao.readMany({nonPaginated: true})
+			if (res.status.error || !res.result) {
+				return new Result(false, ErrorCode.Success, 'Topics fetched successfully', [])
+			}
+			const topicNames = Array.from(
+				new Set(res.result.map((t: UserTopics) => t.topicName).filter(Boolean))
+			)
+			return new Result(false, ErrorCode.Success, 'Topics fetched successfully', topicNames)
+		} catch (error) {
+			log.error('Error getting all topics', 'UserTopicsService.getAllTopics', error)
+			return new Result(true, ErrorCode.InternalServerError, 'Error getting topics')
+		}
+	}
 }

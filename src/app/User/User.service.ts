@@ -70,7 +70,6 @@ export class UserService extends Service<User> {
 					email: user.email,
 					emailVerified: user.emailVerified,
 					phoneNumber: user.phoneNumber ?? null,
-					country: user.country ?? null,
 					countryCode: user.countryCode ?? null,
 					accountType: user.userType,
 					isActive: user.isActive,
@@ -714,8 +713,9 @@ export class UserService extends Service<User> {
 			emailVerified?: (() => string) | boolean | undefined
 			password?: string | (() => string) | undefined
 			userType?: (() => string) | UserType | undefined
-			country?: (() => string) | (string | undefined)
 			isActive?: boolean | undefined
+			phoneNumber?: (() => string) | (string | undefined)
+			countryCode?: (() => string) | (string | undefined)
 		},
 		manager?: EntityManager
 	): Promise<Result<number | null>> {

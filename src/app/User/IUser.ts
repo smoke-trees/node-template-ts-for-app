@@ -7,7 +7,6 @@ export interface IUser {
 	password: string
 	userType: UserType
 	phoneNumber?: string
-	country?: string
 	countryCode?: string
 	isSoftDeleted: boolean
 	softDeletedAt: Date | null

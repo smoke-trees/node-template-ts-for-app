@@ -58,6 +58,12 @@ export class UserTopicsController extends ServiceController<UserTopics> {
 				method: Methods.GET,
 				handler: this.getTopicUsersHandler.bind(this),
 				localMiddleware: [authMiddleware.generateAuthMiddleWare({ adminOnly: true })]
+			},
+			{
+				path: '/all-topics',
+				method: Methods.GET,
+				handler: this.getAllTopicsHandler.bind(this),
+				localMiddleware: [authMiddleware.generateAuthMiddleWare({ adminOnly: true })]
 			}
 		)
 		this.loadDocumentation()
@@ -194,6 +200,22 @@ export class UserTopicsController extends ServiceController<UserTopics> {
 			return
 		}
 		const result = await this.service.getTopicUsers(topicName)
+		res.status(result.getStatus()).json(result)
+	}
+
+	@Documentation.addRoute({
+		path: '/user-topics/all-topics',
+		tags: ['UserTopics'],
+		method: Methods.GET,
+		responses: {
+			200: {
+				description: 'Success',
+				value: { $ref: Documentation.getRef(Result) }
+			}
+		}
+	})
+	async getAllTopicsHandler(req: Request, res: Response) {
+		const result = await this.service.getAllTopics()
 		res.status(result.getStatus()).json(result)
 	}
 }
