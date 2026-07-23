@@ -25,7 +25,7 @@ export class ApplicationSettingsController extends ServiceController<Application
 			create: [authMiddleware.generateAuthMiddleWare({ adminOnly: true })],
 			update: [authMiddleware.generateAuthMiddleWare({ adminOnly: true })],
 			delete: [authMiddleware.generateAuthMiddleWare({ adminOnly: true })],
-			read: [authMiddleware.generateAuthMiddleWare({})],
+			read: [],
 			readMany: [],
 			readManyWithoutPagination: []
 		})

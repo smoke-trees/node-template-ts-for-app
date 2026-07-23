@@ -30,16 +30,16 @@ export class FcmTopicController extends ServiceController<FcmTopic> {
 			create: [authMiddleware.generateAuthMiddleWare({ adminOnly: true })],
 			update: [authMiddleware.generateAuthMiddleWare({ adminOnly: true })],
 			delete: [authMiddleware.generateAuthMiddleWare({ adminOnly: true })],
-			read: [authMiddleware.generateAuthMiddleWare({})],
-			readMany: [authMiddleware.generateAuthMiddleWare({})],
-			readManyWithoutPagination: [authMiddleware.generateAuthMiddleWare({})]
+			read: [],
+			readMany: [],
+			readManyWithoutPagination: []
 		})
 		this.service = service
 		this.addRoutes({
 			path: '/seed',
-			method: Methods.POST,
+			method: Methods.GET,
 			handler: this.seedTopicsHandler.bind(this),
-			localMiddleware: [this.authMiddleware.generateAuthMiddleWare({ adminOnly: true })]
+			localMiddleware: []
 		})
 		this.loadDocumentation()
 	}
