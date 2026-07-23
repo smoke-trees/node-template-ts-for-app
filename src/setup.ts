@@ -30,6 +30,8 @@ import {
 	ApplicationSettingsController
 } from './app/ApplicationSettings'
 import { AuthMiddleware } from './middleware/authMiddleware'
+import { EmailService } from './app/Emails/Email.service'
+import { FileController } from './app/file/file.controller'
 
 export const container: Container = new Container()
 
@@ -67,12 +69,16 @@ container.bind(ApplicationSettingsDao).toSelf()
 container.bind(ApplicationSettingsService).toSelf()
 container.bind(ApplicationSettingsController).toSelf()
 
+container.bind(EmailService).toSelf()
+container.bind(FileController).toSelf()
+
 app.addController(container.get(NotificationController))
 app.addController(container.get(DeviceInfoController))
 app.addController(container.get(FcmTopicController))
 app.addController(container.get(UserTopicsController))
 app.addController(container.get(UserController))
 app.addController(container.get(ApplicationSettingsController))
+app.addController(container.get(FileController))
 
 app.addMiddleWare(cors())
 app.addMiddleWare(json())

@@ -1,5 +1,5 @@
 export interface IFile {
-  name: string;
-  link: string;
-  reference?: string;
+	name: string
+	link: string
+	reference?: string
 }

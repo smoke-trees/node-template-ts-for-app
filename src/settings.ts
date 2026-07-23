@@ -18,13 +18,13 @@ export class ApplicationSettings extends Settings {
 	userSoftDelete: boolean
 	maxSessionsPerUser: number
 	// AWS storage config
-	awsAccessKey: string;
-	awsSecretKey: string;
-	awsRegion: string;
-  	awsProfileName: string;
-  	defaultEmailSender: string;
-  	s3Bucket: string;
-  	s3Folder: string;
+	awsAccessKey: string
+	awsSecretKey: string
+	awsRegion: string
+	awsProfileName: string
+	defaultEmailSender: string
+	s3Bucket: string
+	s3Folder: string
 
 	// Firebase Config for Firebase Cloud Messaging and download it from firebase console
 	firebaseCreds: {
