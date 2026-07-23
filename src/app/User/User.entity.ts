@@ -34,7 +34,6 @@ export class User extends BaseEntity implements IUser {
 	@Column({ name: 'user_type', type: 'enum', enum: UserType, default: UserType.user })
 	userType!: UserType
 
-
 	@Documentation.addField({ type: 'string' })
 	@Column({ name: 'phone_number', type: 'varchar', nullable: true })
 	phoneNumber?: string

@@ -1,22 +1,18 @@
 import { ErrorCode, Result, Service } from '@smoke-trees/postgres-backend'
 import { DeviceInfoDao } from './DeviceInfo.dao'
 import { DeviceInfo } from './DeviceInfo.entity'
-import { FirebaseMessagingClient } from '../Notification/notificationClient'
 import { inject, injectable } from 'inversify'
 
 @injectable()
 export class DeviceInfoService extends Service<DeviceInfo> {
 	dao: DeviceInfoDao
-	firebaseMessagingClient: FirebaseMessagingClient
+
 	constructor(
 		@inject(DeviceInfoDao)
-		dao: DeviceInfoDao,
-		@inject(FirebaseMessagingClient)
-		firebaseMessagingClient: FirebaseMessagingClient
+		dao: DeviceInfoDao
 	) {
 		super(dao)
 		this.dao = dao
-		this.firebaseMessagingClient = firebaseMessagingClient
 	}
 
 	async create(info: DeviceInfo): Promise<Result<number | string>> {
@@ -34,11 +30,7 @@ export class DeviceInfoService extends Service<DeviceInfo> {
 			}
 			return new Result(false, ErrorCode.Success, 'Updated DeviceInfo')
 		} else {
-			const newInfo = await this.dao.create(info)
-			if (info.fcmToken) {
-				await this.firebaseMessagingClient.subscribeToTopic([info.fcmToken!], `user-${info.userId}`)
-			}
-			return newInfo
+			return await this.dao.create(info)
 		}
 	}
 }

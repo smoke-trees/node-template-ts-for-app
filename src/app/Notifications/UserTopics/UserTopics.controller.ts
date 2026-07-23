@@ -28,10 +28,31 @@ export class UserTopicsController extends ServiceController<UserTopics> {
 		readonly authMiddleware: AuthMiddleware
 	) {
 		super(app, UserTopics, service, undefined, {
-			create: [authMiddleware.generateAuthMiddleWare({})],
-			read: [authMiddleware.generateAuthMiddleWare({})],
-			readMany: [authMiddleware.generateAuthMiddleWare({ adminOnly: true })],
-			delete: [authMiddleware.generateAuthMiddleWare({})]
+			create: [
+				authMiddleware.generateAuthMiddleWare({
+					userIdLoc: (req: Request) => req.body.userId?.toString()
+				})
+			],
+			read: [
+				authMiddleware.generateAuthMiddleWare({
+					userIdLoc: (req: Request) => req.query.userId?.toString()
+				})
+			],
+			readMany: [
+				authMiddleware.generateAuthMiddleWare({
+					userIdLoc: (req: Request) => req.query.userId?.toString()
+				})
+			],
+			update: [
+				authMiddleware.generateAuthMiddleWare({
+					userIdLoc: (req: Request) => req.body.userId?.toString()
+				})
+			],
+			delete: [
+				authMiddleware.generateAuthMiddleWare({
+					userIdLoc: (req: Request) => req.query.userId?.toString()
+				})
+			]
 		})
 		this.service = service
 		this.addRoutes(
@@ -39,19 +60,31 @@ export class UserTopicsController extends ServiceController<UserTopics> {
 				path: '/subscribe',
 				method: Methods.POST,
 				handler: this.subscribeHandler.bind(this),
-				localMiddleware: [authMiddleware.generateAuthMiddleWare({})]
+				localMiddleware: [
+					authMiddleware.generateAuthMiddleWare({
+						userIdLoc: (req: Request) => req.body.userId?.toString()
+					})
+				]
 			},
 			{
 				path: '/unsubscribe',
 				method: Methods.POST,
 				handler: this.unsubscribeHandler.bind(this),
-				localMiddleware: [authMiddleware.generateAuthMiddleWare({})]
+				localMiddleware: [
+					authMiddleware.generateAuthMiddleWare({
+						userIdLoc: (req: Request) => req.body.userId?.toString()
+					})
+				]
 			},
 			{
 				path: '/user/:userId',
 				method: Methods.GET,
 				handler: this.getUserTopicsHandler.bind(this),
-				localMiddleware: [authMiddleware.generateAuthMiddleWare({})]
+				localMiddleware: [
+					authMiddleware.generateAuthMiddleWare({
+						userIdLoc: (req: Request) => req.params.userId?.toString()
+					})
+				]
 			},
 			{
 				path: '/topic/:topicName',

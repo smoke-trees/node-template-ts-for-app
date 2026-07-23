@@ -15,6 +15,7 @@ import { In, MoreThanOrEqual } from 'typeorm'
 import { inject, injectable } from 'inversify'
 import { UserDao } from '../../User/User.dao'
 import { UserTopicsDao } from '../UserTopics/UserTopics.dao'
+import { FcmTopicDao } from '../FcmTopic/FcmTopic.dao'
 
 @Documentation.addSchema()
 export class NotificationVariableData {
@@ -96,6 +97,8 @@ export class NotificationService extends Service<Notification> {
 	deviceInfoDao: DeviceInfoDao
 	firebaseMessagingClient: FirebaseMessagingClient
 	userTopicsDao: UserTopicsDao
+	fcmTopicDao: FcmTopicDao
+
 	constructor(
 		@inject(NotificationDao)
 		dao: NotificationDao,
@@ -106,13 +109,16 @@ export class NotificationService extends Service<Notification> {
 		@inject(UserDao)
 		userDao: UserDao,
 		@inject(UserTopicsDao)
-		userTopicsDao: UserTopicsDao
+		userTopicsDao: UserTopicsDao,
+		@inject(FcmTopicDao)
+		fcmTopicDao: FcmTopicDao
 	) {
 		super(dao)
 		this.deviceInfoDao = deviceInfoDao
 		this.firebaseMessagingClient = firebaseMessagingClient
 		this.userDao = userDao
 		this.userTopicsDao = userTopicsDao
+		this.fcmTopicDao = fcmTopicDao
 	}
 
 	createRawString(notificationString: string, variables: NotificationVariableData): string {
@@ -216,25 +222,38 @@ export class NotificationService extends Service<Notification> {
 				)
 			}
 
-			const subscribers = await this.userTopicsDao.readMany({ where: { topicName: topic } })
-			if (subscribers.result && subscribers.result.length > 0) {
-				const batchId = crypto.randomUUID()
-				for (const subscriber of subscribers.result) {
-					const notificationEntity = new Notification({
-						userId: subscriber.userId,
-						notificationToken: null,
-						title: notificationBody.title,
-						body: notificationBody.body,
-						imageUrl: notificationBody.imageUrl ?? null,
-						redirectParameters: notificationBody.redirectParameters,
-						phoneNumber: null,
-						notificationType: NotificationType.Promotional,
-						notificationSent: true,
-						notificationFailureData: null,
-						batchId,
-						topicName: topic
-					})
-					this.create(notificationEntity)
+			const fcmTopic = await this.fcmTopicDao.read({ where: { name: topic } })
+			if (!fcmTopic.result) {
+				log.warn(
+					'FCM topic not found while persisting topic notifications; skipping subscriber records',
+					'NotificationService.sendMessageToTopic',
+					{ topic }
+				)
+			} else {
+				const subscribers = await this.userTopicsDao.readMany({
+					where: { topicId: fcmTopic.result.id },
+					nonPaginated: true,
+					select: { userId: true }
+				})
+				if (subscribers.result && subscribers.result.length > 0) {
+					const batchId = crypto.randomUUID()
+					for (const subscriber of subscribers.result) {
+						const notificationEntity = new Notification({
+							userId: subscriber.userId,
+							notificationToken: null,
+							title: notificationBody.title,
+							body: notificationBody.body,
+							imageUrl: notificationBody.imageUrl ?? null,
+							redirectParameters: notificationBody.redirectParameters,
+							phoneNumber: null,
+							notificationType: NotificationType.Promotional,
+							notificationSent: true,
+							notificationFailureData: null,
+							batchId,
+							topicName: topic
+						})
+						this.create(notificationEntity)
+					}
 				}
 			}
 
@@ -263,9 +282,49 @@ export class NotificationService extends Service<Notification> {
 				//Admin dont want to wait for all notifications to complete.
 				body.receiverIds.forEach((e) => this.sendFCMNotificationToUser(e, notification))
 			}
+		} else if (body.receiverType === NotificationReceivers.All) {
+			this.sendFCMNotificationToAllUsers(notification)
 		}
 
 		return new Result(false, ErrorCode.Success, 'Initiated Notifications')
+	}
+
+	async sendFCMNotificationToAllUsers(notificationCreate: FCMNotificationRequest) {
+		try {
+			const users = await this.userDao.readMany({
+				where: { isActive: true, isSoftDeleted: false },
+				nonPaginated: true,
+				select: { id: true }
+			})
+			if (users.status.error) {
+				return new Result(
+					true,
+					ErrorCode.InternalServerError,
+					'Error in sending FCM Notification to all users'
+				)
+			}
+			if (!users.result) {
+				return new Result(false, ErrorCode.Success, 'No active users found')
+			}
+			users.result.forEach((user) => {
+				this.sendFCMNotificationToUser(user.id, notificationCreate)
+			})
+			return new Result(false, ErrorCode.Success, 'Sent Successfully', users.result.length)
+		} catch (error) {
+			log.error(
+				'Error in sending FCM Notification to all users',
+				'NotificationService.sendFCMNotificationToAllUsers',
+				error,
+				{
+					notificationCreate
+				}
+			)
+			return new Result(
+				true,
+				ErrorCode.InternalServerError,
+				'Error in sending FCM Notification to all users'
+			)
+		}
 	}
 
 	createNotificationBody(body: IManualNotificationAdmin) {

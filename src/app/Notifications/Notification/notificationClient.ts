@@ -157,21 +157,4 @@ export class FirebaseMessagingClient {
 			return null
 		}
 	}
-
-	async subscribeToTopic(tokens: string[], topic: string) {
-		if (!this.firebaseAdmin || !this.firebaseAdmin.name) {
-			log.warn(
-				'Firebase Admin is not initialized. Skipping topic subscription.',
-				'FirebaseMessagingClient.subscribeToTopic'
-			)
-			return null
-		}
-		const response = await getMessaging(this.firebaseAdmin).subscribeToTopic(tokens, topic)
-		log.info(
-			`Successfully subscribed to topic: ${topic}`,
-			'FirebaseMessagingClient.subscribeToTopic',
-			{ response }
-		)
-		return response
-	}
 }

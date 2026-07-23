@@ -6,11 +6,12 @@ import { DeviceInfo } from './app/Notifications/DeviceInfo/DeviceInfo.entity'
 import { Notification } from './app/Notifications/Notification/Notification.entity'
 import { ApplicationSettings } from './app/ApplicationSettings/ApplicationSettings.entity'
 import { UserTopics } from './app/Notifications/UserTopics/UserTopics.entity'
+import { FcmTopic } from './app/Notifications/FcmTopic/FcmTopic.entity'
 
 const database = new Database(settings)
 
 // Add Entities
-database.addEntity(User, DeviceInfo, Notification, ApplicationSettings, UserTopics)
+database.addEntity(User, DeviceInfo, Notification, ApplicationSettings, UserTopics, FcmTopic)
 
 // Add Migrations
 

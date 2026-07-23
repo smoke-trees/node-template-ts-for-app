@@ -40,6 +40,11 @@ export class DeviceInfoController extends ServiceController<DeviceInfo> {
 						userIdLoc: (req: Request) => req.query.userId?.toString()
 					})
 				],
+				readManyWithoutPagination: [
+					authMiddleWare.generateAuthMiddleWare({
+						userIdLoc: (req: Request) => req.query.userId?.toString()
+					})
+				],
 				update: [
 					authMiddleWare.generateAuthMiddleWare({
 						userIdLoc: (req: Request) => req.body.userId

@@ -726,7 +726,9 @@ export class UserService extends Service<User> {
 
 		if (values.isActive === false) {
 			const targetUserId =
-				typeof id === 'string' ? id : typeof id === 'number' ? id.toString() : undefined
+				typeof id === 'string' ? id
+				: typeof id === 'number' ? id.toString()
+				: undefined
 			if (targetUserId) {
 				await this.revokeAllSessions(targetUserId)
 			}
