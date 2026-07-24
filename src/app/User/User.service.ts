@@ -349,7 +349,7 @@ export class UserService extends Service<User> {
 		const token = jwt.sign(
 			{
 				...safeUser,
-				type: user.userType,
+				userType: user.userType,
 				userId: user.id,
 				tid
 			},
